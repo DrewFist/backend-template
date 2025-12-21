@@ -28,38 +28,58 @@ Example: `apps/api/src/modules/auth/` contains `auth.routes.ts`, `handlers/get-o
 
 ### Handler Pattern
 
-**Always use the factory pattern** from `@/lib/factory` for handlers:
+**Always use the RouteHandler pattern** with colocated route definitions:
 
 ```typescript
-import { factory } from "@/lib/factory";
+import { createRoute, z } from "@hono/zod-openapi";
+import type { RouteHandler } from "@hono/zod-openapi";
+import { StatusCodes, errorResponseSchemas } from "@repo/config";
 
-export const myHandler = factory.createHandlers(
-  customZValidator("param", schema), // validation middleware
-  (c) => {
-    // handler logic
-    return c.json({ data });
+// Define route with OpenAPI schema
+export const myRoute = createRoute({
+  method: "get",
+  path: "/resource",
+  tags: ["Resource"],
+  summary: "Get resource",
+  request: {
+    query: z.object({ id: z.string() }),
   },
-);
+  responses: {
+    [StatusCodes.HTTP_200_OK]: {
+      content: { "application/json": { schema: z.object({ data: z.any() }) } },
+      description: "Success",
+    },
+    ...errorResponseSchemas,
+  },
+});
+
+// Implement handler with type safety
+export const myHandler: RouteHandler<typeof myRoute> = async (c) => {
+  const { id } = c.req.valid("query");
+  return c.json({ data: {} }, StatusCodes.HTTP_200_OK);
+};
 ```
 
 ### Database Patterns
 
 1. **Shared database package**: Database code lives in `packages/db/src/`
+
    - `connection.ts` - Database connection management (use `initializeDB()` before `connectDB()`)
    - `schema/{domain}/` - Drizzle ORM table schemas
    - `services/{domain}.service.ts` - CRUD operations organized by domain
 
 2. **Using the database**:
+
    ```typescript
    import { initializeDB, connectDB, UsersService, SessionService } from "@repo/db";
-   
+
    // Initialize with config (in app startup)
    initializeDB({
      connectionString: env.DATABASE_URL,
      ssl: env.NODE_ENV === "development" ? false : { rejectUnauthorized: false },
    });
    await connectDB();
-   
+
    // Use services with optional logger
    const user = await UsersService.create(payload, logger, { tx });
    ```
@@ -67,12 +87,16 @@ export const myHandler = factory.createHandlers(
 3. **Casing**: Drizzle uses `snake_case` for DB columns (configured in `apps/api/drizzle.config.ts`)
 
 4. **Service namespace pattern**: Services use namespace exports with optional logger parameter:
+
    ```typescript
    export namespace UsersService {
      export async function create(
        payload: NewUser,
-       logger?: { audit: (msg: string, meta: any) => void; error: (msg: string, meta: any) => void },
-       options?: { tx?: DBTransaction }
+       logger?: {
+         audit: (msg: string, meta: any) => void;
+         error: (msg: string, meta: any) => void;
+       },
+       options?: { tx?: DBTransaction },
      ) {
        const queryClient = options?.tx || db;
        return queryClient.insert(usersTable).values(payload).returning();
@@ -84,15 +108,26 @@ export const myHandler = factory.createHandlers(
 
 ### Validation & Error Handling
 
-- **Use `customZValidator`** (not raw zValidator) - it formats errors consistently:
+- **Define validation in route schema** using Zod:
   ```typescript
-  customZValidator("param", z.object({ provider: z.nativeEnum(SessionProvider) }));
+  request: {
+    query: z.object({ provider: z.nativeEnum(SessionProvider) }),
+  }
   ```
-- Throws `HTTPException` with custom responses:
+- **Global error handling** via `createApp()` with `defaultHook` for validation errors
+- **Throw errors** with `HTTPException` and `StatusCodes`:
   ```typescript
   throw new HTTPException(StatusCodes.HTTP_400_BAD_REQUEST, {
     res: c.json({ message: "Error message" }),
   });
+  ```
+- **Always include error schemas** in route responses:
+  ```typescript
+  import { errorResponseSchemas } from "@repo/config";
+  responses: {
+    [StatusCodes.HTTP_200_OK]: { /* ... */ },
+    ...errorResponseSchemas,  // 400, 401, 403, 404, 429, 500
+  }
   ```
 
 ### OAuth Architecture
@@ -122,12 +157,42 @@ logger.audit("sensitive action", { module: "users", action: "service:create" });
 
 Modules: `"db" | "auth" | "users" | "system" | "session" | "security"`
 
+### Rate Limiting
+
+**Three tiers** available in `packages/shared/src/rate-limiter.ts`:
+
+1. **globalRateLimiter**: 100 requests per 15 minutes (applied to entire app)
+2. **authRateLimiter**: 20 requests per 15 minutes (for auth routes)
+3. **strictRateLimiter**: 10 requests per 15 minutes (for sensitive operations)
+
+Apply to routes:
+
+```typescript
+const router = createRouter().use(authRateLimiter).openapi(route, handler);
+```
+
+### CORS Configuration
+
+**Environment-based** CORS in `apps/api/src/index.ts`:
+
+- Uses `CORS_ORIGIN` env var (comma-separated or `*`)
+- Credentials support enabled
+- Configurable allowed headers and methods
+
+### OpenAPI Documentation
+
+- **Scalar UI** at `/docs` endpoint
+- Configured via `configureOpenAPI()` from `@repo/shared`
+- Routes defined with `createRoute()` from `@hono/zod-openapi`
+- Registered with `.openapi(route, handler)` on OpenAPIHono router
+
 ## Environment & Configuration
 
-- **Env validation**: All env vars in `apps/api/src/config/env.ts` with Zod schemas and validation
+- **Env validation**: All env vars in `packages/config/src/env.ts` with Zod schemas
 - **Path aliases**: Use `@/*` for `src/*` (configured in `apps/api/tsconfig.json`)
-- **Status codes**: Import from `@/config/status-codes` instead of hardcoding
-- **Shared packages**: Import from `@repo/shared` for cross-service types and utils
+- **Status codes**: Import `StatusCodes` from `@repo/config` (never hardcode)
+- **Error schemas**: Import `errorResponseSchemas` from `@repo/config`
+- **Shared packages**: Import from `@repo/shared` for utilities, error handling, rate limiting
 - **Database package**: Import from `@repo/db` for database schemas, services, and types
 
 ## Development Workflows
@@ -159,18 +224,27 @@ Database: `backend-template` on port 5432
 
 ## Key Files to Reference
 
-- [apps/api/src/modules/auth/auth.routes.ts](apps/api/src/modules/auth/auth.routes.ts) - Generic OAuth routing pattern
+- [apps/api/src/modules/auth/auth.routes.ts](apps/api/src/modules/auth/auth.routes.ts) - Route registration pattern
+- [apps/api/src/modules/auth/handlers/get-oauth.handler.ts](apps/api/src/modules/auth/handlers/get-oauth.handler.ts) - RouteHandler pattern example
 - [apps/api/src/modules/auth/providers/base.provider.ts](apps/api/src/modules/auth/providers/base.provider.ts) - Provider interface
 - [packages/db/src/connection.ts](packages/db/src/connection.ts) - DB setup with transaction types
-- [packages/db/src/services/users.service.ts](packages/db/src/services/users.service.ts) - Example service pattern
-- [apps/api/src/middlewares/custom-z-validator.ts](apps/api/src/middlewares/custom-z-validator.ts) - Validation wrapper
-- [apps/api/src/lib/factory.ts](apps/api/src/lib/factory.ts) - Handler factory pattern
+- [packages/db/src/services/users.service.ts](packages/db/src/services/users.service.ts) - Service namespace pattern
+- [packages/shared/src/create-app.ts](packages/shared/src/create-app.ts) - App factory with error handling
+- [packages/shared/src/error-schemas.ts](packages/shared/src/error-schemas.ts) - OpenAPI error schemas
+- [packages/shared/src/rate-limiter.ts](packages/shared/src/rate-limiter.ts) - Rate limiting configurations
+- [packages/shared/src/middlewares/custom-z-validator.ts](packages/shared/src/middlewares/custom-z-validator.ts) - Validation wrapper
 
 ## Project-Specific Conventions
 
-1. **No default exports for routes** - use named exports, import with `default` keyword
-2. **Soft deletes**: Tables use `deletedAt` timestamp pattern
-3. **All timestamps** use `{ withTimezone: true }`
-4. **Service errors**: Always pass logger to db services and log with module/action metadata before throwing
-5. **Route versioning**: All routes under `/v1/` prefix via `apps/api/src/api/v1/index.ts`
-6. **Database initialization**: Always call `initializeDB()` before `connectDB()` in app startup
+1. **Route definitions colocated with handlers** - export both `route` and `handler` from same file
+2. **Routes file simplified** - just imports and registrations, no duplicate schemas
+3. **Use RouteHandler<typeof route>** for type-safe handlers
+4. **Always use StatusCodes enum** - import from `@repo/config`, never hardcode numbers
+5. **Always include errorResponseSchemas** in route responses
+6. **Soft deletes**: Tables use `deletedAt` timestamp pattern
+7. **All timestamps** use `{ withTimezone: true }`
+8. **Service errors**: Always pass logger to db services and log with module/action metadata
+9. **Route versioning**: All routes under `/v1/` prefix
+10. **OpenAPI documentation**: All routes must have proper OpenAPI schemas
+11. **Rate limiting**: Apply appropriate limiter (global/auth/strict) to routes
+12. **No block comments** in code (// ===== Section =====)

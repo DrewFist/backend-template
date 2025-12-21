@@ -6,12 +6,16 @@ A production-ready **Bun + Hono + TypeScript + PostgreSQL + Drizzle ORM** monore
 
 - **Monorepo Architecture**: Turborepo with Bun workspaces for managing multiple services
 - **Modern Stack**: Bun runtime, Hono web framework, TypeScript, PostgreSQL, Drizzle ORM
+- **OpenAPI Integration**: Type-safe API definitions with @hono/zod-openapi and Scalar documentation
 - **OAuth Authentication**: Extensible OAuth provider factory pattern (Google included)
+- **Rate Limiting**: Built-in rate limiting with hono-rate-limiter (global + route-specific)
+- **Global Error Handling**: Centralized error handling with standardized response schemas
+- **CORS Configuration**: Environment-specific CORS with credentials support
 - **Shared Packages**: Centralized configuration, database layer, and utilities
 - **Type-Safe**: Full TypeScript with strict mode and Zod validation
 - **Structured Logging**: Winston logger with audit trails
 - **Security**: JWT tokens, AES-256-GCM encryption, CSRF protection
-- **Developer Experience**: Hot reload, path aliases, consistent error handling
+- **Developer Experience**: Hot reload, path aliases, colocated route definitions
 
 ## 📁 Project Structure
 
@@ -37,12 +41,18 @@ A production-ready **Bun + Hono + TypeScript + PostgreSQL + Drizzle ORM** monore
 │   │   └── services/         # Database CRUD operations
 │   │
 │   └── shared/                # Shared utilities
-│       ├── factory.ts        # Hono handler factory
+│       ├── create-app.ts     # OpenAPI app factory with error handling
+│       ├── configure-openapi.ts  # Scalar documentation setup
+│       ├── factory.ts        # Hono handler factory (RouteHandler pattern)
 │       ├── logger.ts         # Winston logger
 │       ├── jwt.ts            # JWT utilities
 │       ├── encryption.ts     # AES encryption
+│       ├── error-handler.ts  # Global error handling
+│       ├── error-schemas.ts  # OpenAPI error response schemas
+│       ├── rate-limiter.ts   # Rate limiting configurations
 │       ├── helpers.ts        # Common helpers
-│       └── middlewares/      # Shared middlewares
+│       └── middlewares/
+│           └── custom-z-validator.ts  # Zod validation wrapper
 │
 ├── turbo.json                 # Turborepo configuration
 └── package.json               # Workspace root
@@ -101,6 +111,10 @@ GOOGLE_REDIRECT_URI=http://localhost:3000/v1/auth/oauth/google/callback
 # Security
 JWT_SECRET=your-jwt-secret-min-32-chars
 ENCRYPTION_KEY=your-64-char-hex-encryption-key  # Generate with: openssl rand -hex 32
+
+# CORS
+CORS_ORIGIN=http://localhost:3000  # Comma-separated origins or * for all
+FRONTEND_URL=http://localhost:3000
 ```
 
 ### 4. Start Local Database
@@ -189,44 +203,64 @@ modules/
 **Example handler** (`handlers/get-items.handler.ts`):
 
 ```typescript
-import { factory, customZValidator } from "@repo/shared";
-import { z } from "zod";
+import { createRoute, z } from "@hono/zod-openapi";
+import type { RouteHandler } from "@hono/zod-openapi";
+import { StatusCodes, errorResponseSchemas } from "@repo/config";
 
-export const getItemsHandler = factory.createHandlers(
-  customZValidator(
-    "query",
-    z.object({
+// Route definition
+export const getItemsRoute = createRoute({
+  method: "get",
+  path: "/items",
+  tags: ["Items"],
+  summary: "Get items",
+  request: {
+    query: z.object({
       limit: z.string().optional().default("10"),
     }),
-  ),
-  async (c) => {
-    const { limit } = c.req.valid("query");
-    // Your logic here
-    return c.json({ items: [] });
   },
-);
+  responses: {
+    [StatusCodes.HTTP_200_OK]: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            items: z.array(z.any()),
+          }),
+        },
+      },
+      description: "Items retrieved successfully",
+    },
+    ...errorResponseSchemas,
+  },
+});
+
+// Handler implementation
+export const getItemsHandler: RouteHandler<typeof getItemsRoute> = async (c) => {
+  const { limit } = c.req.valid("query");
+  // Your logic here
+  return c.json({ items: [] }, StatusCodes.HTTP_200_OK);
+};
 ```
 
 **Register routes** (`feature.routes.ts`):
 
 ```typescript
-import { Hono } from "hono";
-import { getItemsHandler } from "./handlers/get-items.handler";
+import { createRouter } from "@repo/shared";
+import { getItemsRoute, getItemsHandler } from "./handlers/get-items.handler";
 
-const yourFeatureRoutes = new Hono();
-
-yourFeatureRoutes.get("/items", ...getItemsHandler);
+const yourFeatureRoutes = createRouter().openapi(getItemsRoute, getItemsHandler);
 
 export default yourFeatureRoutes;
 ```
 
-**Add to API** (`apps/api/src/api/v1/index.ts`):
+**Add to API** (`apps/api/src/index.ts`):
 
 ```typescript
 import yourFeatureRoutes from "@/modules/your-feature/feature.routes";
 
-v1Routes.route("/your-feature", yourFeatureRoutes);
+app.route("/v1/your-feature", yourFeatureRoutes);
 ```
+
+**View API Documentation**: Visit `http://localhost:3000/docs` to see your routes in Scalar UI
 
 ### Adding Database Tables
 
@@ -398,12 +432,15 @@ bun run clean
 
 - **Import aliases**: Use `@repo/*` for workspace packages, `@/*` for local paths
 - **Naming**: `kebab-case` for files, `PascalCase` for types, `camelCase` for functions
-- **Exports**: Named exports preferred, no default exports for routes
+- **Exports**: Named exports preferred, routes exported as default
 - **Database**: `snake_case` for columns (configured in drizzle.config.ts)
 - **Soft deletes**: Use `deletedAt` timestamp pattern
 - **Logging**: Always pass logger to services with module/action metadata
-- **Validation**: Use `customZValidator` (not raw zValidator)
-- **Handlers**: Always use factory pattern from `@repo/shared`
+- **Route Definitions**: Colocate with handlers using `createRoute()` + `RouteHandler<typeof route>`
+- **Status Codes**: Always use `StatusCodes` enum from `@repo/config`
+- **Error Responses**: Always include `...errorResponseSchemas` in route responses
+- **Handlers**: Use `RouteHandler<typeof route>` pattern for type safety
+- **OpenAPI**: All routes use OpenAPI schemas for automatic documentation
 
 ## 🧪 Common Patterns
 
@@ -413,9 +450,39 @@ bun run clean
 import { HTTPException } from "hono/http-exception";
 import { StatusCodes } from "@repo/config";
 
+// Throw errors with consistent format
 throw new HTTPException(StatusCodes.HTTP_400_BAD_REQUEST, {
   res: c.json({ message: "Error message", errors: {} }),
 });
+
+// Use error response schemas in route definitions
+import { errorResponseSchemas } from "@repo/config";
+
+export const myRoute = createRoute({
+  // ...
+  responses: {
+    [StatusCodes.HTTP_200_OK]: {
+      /* success response */
+    },
+    ...errorResponseSchemas, // Adds 400, 401, 403, 404, 429, 500
+  },
+});
+```
+
+### Rate Limiting
+
+```typescript
+import { authRateLimiter, strictRateLimiter } from "@repo/shared";
+
+// Apply to specific routes
+const router = createRouter()
+  .use(authRateLimiter) // 20 requests per 15 min
+  .openapi(route, handler);
+
+// Or use strict limiting
+const strictRouter = createRouter()
+  .use(strictRateLimiter) // 10 requests per 15 min
+  .openapi(route, handler);
 ```
 
 ### Transaction Support
@@ -467,13 +534,16 @@ This is a template - customize it for your needs! Common modifications:
 
 ## 📚 Tech Stack
 
-- **Runtime**: [Bun](https://bun.sh/) v1.3.1
-- **Framework**: [Hono](https://hono.dev/) v4.10.3
+- **Runtime**: [Bun](https://bun.sh/) v1.3.1+
+- **Framework**: [Hono](https://hono.dev/) v4.10.3+
+- **OpenAPI**: [@hono/zod-openapi](https://github.com/honojs/middleware) v0.18.4+
+- **Documentation**: [Scalar](https://scalar.com/) v1.0.0+
 - **Database**: [PostgreSQL](https://www.postgresql.org/)
-- **ORM**: [Drizzle](https://orm.drizzle.team/) v0.44.7
-- **Validation**: [Zod](https://zod.dev/) v4.1.12
-- **Logging**: [Winston](https://github.com/winstonjs/winston) v3.18.3
-- **Monorepo**: [Turborepo](https://turbo.build/) v2.7.0
+- **ORM**: [Drizzle](https://orm.drizzle.team/) v0.44.7+
+- **Validation**: [Zod](https://zod.dev/) v4.1.12+
+- **Logging**: [Winston](https://github.com/winstonjs/winston) v3.18.3+
+- **Rate Limiting**: [hono-rate-limiter](https://github.com/rhinobase/hono-rate-limiter) v0.5.0+
+- **Monorepo**: [Turborepo](https://turbo.build/) v2.7.0+
 
 ## 📄 License
 
