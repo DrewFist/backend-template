@@ -1,12 +1,12 @@
-import { Hono } from "hono";
-import apiV1Routes from "@/api/v1";
-import { connectDB } from "@repo/db";
-import { logger } from "@repo/shared";
 import { env } from "@repo/config";
 import { serve } from "@hono/node-server";
 import { cors } from "hono/cors";
+import packageJson from "../package.json";
+import { configureOpenAPI, createApp, logger } from "@repo/shared";
+import { connectDB } from "@repo/db";
+import authRoutes from "./modules/auth/auth.routes";
 
-const app = new Hono();
+const app = createApp();
 
 app.use(cors({ origin: "*" }));
 
@@ -15,7 +15,17 @@ app.get("/health", (c) => {
     message: "Server is up and running!!",
   });
 });
-app.route("/", apiV1Routes);
+
+const routes = [authRoutes] as const;
+
+routes.forEach((route) => {
+  app.route("/", route);
+});
+
+configureOpenAPI(app, {
+  title: "API",
+  version: packageJson.version,
+});
 
 // Start server
 async function start() {

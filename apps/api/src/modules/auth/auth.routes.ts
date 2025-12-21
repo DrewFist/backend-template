@@ -1,16 +1,19 @@
-import { Hono } from "hono";
-import { getOauthHandler } from "@/modules/auth/handlers/get-oauth.handler";
-import { getOauthCallbackHandler } from "@/modules/auth/handlers/get-oauth-callback.handler";
-import { postRefreshTokenHandler } from "@/modules/auth/handlers/post-refresh-token.handler";
+import { createRouter } from "@repo/shared";
+import { getOauthProviderRoute, getOauthHandler } from "./handlers/get-oauth.handler";
+import {
+  getOauthCallbackRoute,
+  getOauthCallbackHandler,
+} from "./handlers/get-oauth-callback.handler";
+import {
+  postRefreshTokenRoute,
+  postRefreshTokenHandler,
+} from "./handlers/post-refresh-token.handler";
 
-const authRoutes = new Hono();
+const authRoutes = createRouter();
 
-// Generic OAuth routes - works with any provider (e.g., /oauth/google, /oauth/github)
-// These routes accept provider as a path parameter
-authRoutes.get("/oauth/:provider", ...getOauthHandler);
-authRoutes.get("/oauth/:provider/callback", ...getOauthCallbackHandler);
-
-// Token refresh endpoint
-authRoutes.post("/oauth/refresh", ...postRefreshTokenHandler);
+// Register routes - each handler defines its own OpenAPI schema
+authRoutes.openapi(getOauthProviderRoute, getOauthHandler);
+authRoutes.openapi(getOauthCallbackRoute, getOauthCallbackHandler);
+authRoutes.openapi(postRefreshTokenRoute, postRefreshTokenHandler);
 
 export default authRoutes;

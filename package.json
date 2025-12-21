@@ -18,5 +18,8 @@
   },
   "devDependencies": {
     "turbo": "^2.7.0"
+  },
+  "dependencies": {
+    "@scalar/hono-api-reference": "^0.9.30"
   }
 }
