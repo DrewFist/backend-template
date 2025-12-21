@@ -2,13 +2,16 @@ import { env } from "@repo/config";
 import { serve } from "@hono/node-server";
 import { cors } from "hono/cors";
 import packageJson from "../package.json";
-import { configureOpenAPI, createApp, logger } from "@repo/shared";
+import { configureOpenAPI, createApp, logger, globalRateLimiter } from "@repo/shared";
 import { connectDB } from "@repo/db";
 import authRoutes from "./modules/auth/auth.routes";
 
 const app = createApp();
 
 app.use(cors({ origin: "*" }));
+
+// Apply global rate limiter
+app.use(globalRateLimiter);
 
 app.get("/health", (c) => {
   return c.json({

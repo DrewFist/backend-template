@@ -59,6 +59,18 @@ export const errorResponseSchemas = {
       },
     },
   },
+  [StatusCodes.HTTP_429_TOO_MANY_REQUESTS]: {
+    description: "Too Many Requests - Rate limit exceeded",
+    content: {
+      "application/json": {
+        schema: z.object({
+          message: z.string().openapi({
+            example: "Too many requests, please try again later.",
+          }),
+        }),
+      },
+    },
+  },
   [StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR]: {
     description: "Internal Server Error - Unexpected server error",
     content: {

@@ -7,3 +7,4 @@ export * from "./configure-openapi";
 export * from "./create-app";
 export * from "./error-schemas";
 export { errorHandler, notFoundHandler } from "./error-handler";
+export * from "./rate-limiter";

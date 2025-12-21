@@ -1,4 +1,4 @@
-import { createRouter } from "@repo/shared";
+import { createRouter, authRateLimiter } from "@repo/shared";
 import { getOauthProviderRoute, getOauthHandler } from "./handlers/get-oauth.handler";
 import {
   getOauthCallbackRoute,
@@ -10,6 +10,9 @@ import {
 } from "./handlers/post-refresh-token.handler";
 
 const authRoutes = createRouter();
+
+// Apply auth-specific rate limiting
+authRoutes.use(authRateLimiter);
 
 // Register routes - each handler defines its own OpenAPI schema
 authRoutes.openapi(getOauthProviderRoute, getOauthHandler);
