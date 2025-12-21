@@ -1,4 +1,4 @@
-import { logger } from "@repo/shared";
+import { logger, errorResponseSchemas } from "@repo/shared";
 import { HTTPException } from "hono/http-exception";
 import { StatusCodes } from "@repo/config";
 import { TokenService } from "../services";
@@ -55,54 +55,11 @@ export const postRefreshTokenRoute = createRoute({
         },
       },
     },
-    400: {
-      description: "Invalid request body",
-      content: {
-        "application/json": {
-          schema: z.object({
-            message: z.string().openapi({
-              example: "Session ID is required",
-            }),
-          }),
-        },
-      },
-    },
-    404: {
-      description: "Session not found",
-      content: {
-        "application/json": {
-          schema: z.object({
-            message: z.string().openapi({
-              example: "Session not found",
-            }),
-          }),
-        },
-      },
-    },
-    401: {
-      description: "Session expired or inactive",
-      content: {
-        "application/json": {
-          schema: z.object({
-            message: z.string().openapi({
-              example: "Session expired. Please re-authenticate.",
-            }),
-          }),
-        },
-      },
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: z.object({
-            message: z.string().openapi({
-              example: "Internal Server Error",
-            }),
-          }),
-        },
-      },
-    },
+    [StatusCodes.HTTP_400_BAD_REQUEST]: errorResponseSchemas[StatusCodes.HTTP_400_BAD_REQUEST],
+    [StatusCodes.HTTP_401_UNAUTHORIZED]: errorResponseSchemas[StatusCodes.HTTP_401_UNAUTHORIZED],
+    [StatusCodes.HTTP_404_NOT_FOUND]: errorResponseSchemas[StatusCodes.HTTP_404_NOT_FOUND],
+    [StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR]:
+      errorResponseSchemas[StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR],
   },
 });
 

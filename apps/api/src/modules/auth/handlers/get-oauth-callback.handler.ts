@@ -1,4 +1,4 @@
-import { verifyJwt, signJwt, logger } from "@repo/shared";
+import { verifyJwt, signJwt, logger, errorResponseSchemas } from "@repo/shared";
 import { HTTPException } from "hono/http-exception";
 import { StatusCodes } from "@repo/config";
 import { OAuthService } from "../services";
@@ -97,45 +97,10 @@ export const getOauthCallbackRoute = createRoute({
         },
       },
     },
-    400: {
-      description: "Invalid request or OAuth error",
-      content: {
-        "application/json": {
-          schema: z.object({
-            message: z.string().openapi({
-              example: "Authorization code is required",
-            }),
-            error: z.string().optional().openapi({
-              example: "access_denied",
-            }),
-          }),
-        },
-      },
-    },
-    401: {
-      description: "Authentication failed",
-      content: {
-        "application/json": {
-          schema: z.object({
-            message: z.string().openapi({
-              example: "State token is invalid or expired. Please try again.",
-            }),
-          }),
-        },
-      },
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: z.object({
-            message: z.string().openapi({
-              example: "Internal Server Error",
-            }),
-          }),
-        },
-      },
-    },
+    [StatusCodes.HTTP_400_BAD_REQUEST]: errorResponseSchemas[StatusCodes.HTTP_400_BAD_REQUEST],
+    [StatusCodes.HTTP_401_UNAUTHORIZED]: errorResponseSchemas[StatusCodes.HTTP_401_UNAUTHORIZED],
+    [StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR]:
+      errorResponseSchemas[StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR],
   },
 });
 

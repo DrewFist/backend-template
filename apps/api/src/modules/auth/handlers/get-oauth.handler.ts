@@ -1,4 +1,4 @@
-import { generateStateToken, signJwt } from "@repo/shared";
+import { generateStateToken, signJwt, errorResponseSchemas } from "@repo/shared";
 import { HTTPException } from "hono/http-exception";
 import { StatusCodes } from "@repo/config";
 import { OAuthService } from "../services";
@@ -47,33 +47,9 @@ export const getOauthProviderRoute = createRoute({
         },
       },
     },
-    400: {
-      description: "Invalid provider or provider not supported",
-      content: {
-        "application/json": {
-          schema: z.object({
-            message: z.string().openapi({
-              example: 'OAuth provider "invalid" is not supported',
-            }),
-            supportedProviders: z.array(z.string()).optional().openapi({
-              example: ["google"],
-            }),
-          }),
-        },
-      },
-    },
-    500: {
-      description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: z.object({
-            message: z.string().openapi({
-              example: "Internal Server Error",
-            }),
-          }),
-        },
-      },
-    },
+    [StatusCodes.HTTP_400_BAD_REQUEST]: errorResponseSchemas[StatusCodes.HTTP_400_BAD_REQUEST],
+    [StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR]:
+      errorResponseSchemas[StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR],
   },
 });
 
