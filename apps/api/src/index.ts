@@ -8,7 +8,21 @@ import authRoutes from "./modules/auth/auth.routes";
 
 const app = createApp();
 
-app.use(cors({ origin: "*" }));
+// CORS configuration
+const allowedOrigins = env.CORS_ORIGIN === "*" 
+  ? "*" 
+  : env.CORS_ORIGIN.split(",").map(origin => origin.trim());
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+    allowHeaders: ["Content-Type", "Authorization"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    exposeHeaders: ["Content-Length", "X-Request-Id"],
+    maxAge: 86400,
+  }),
+);
 
 // Apply global rate limiter
 app.use(globalRateLimiter);

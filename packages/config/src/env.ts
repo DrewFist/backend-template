@@ -23,6 +23,16 @@ const envSchema = z.object({
   JWT_SECRET: z
     .string({ message: "JWT_SECRET is required" })
     .min(32, { message: "JWT_SECRET must be at least 32 characters long for security" }),
+  CORS_ORIGIN: z
+    .string({ message: "CORS_ORIGIN is required" })
+    .optional()
+    .default("*")
+    .describe("Comma-separated list of allowed origins or * for all"),
+  FRONTEND_URL: z
+    .string({ message: "FRONTEND_URL is required" })
+    .url({ message: "FRONTEND_URL must be a valid URL" })
+    .optional()
+    .default("http://localhost:3000"),
 });
 
 const env = envSchema.parse({
@@ -34,6 +44,8 @@ const env = envSchema.parse({
   GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
   JWT_SECRET: process.env.JWT_SECRET,
+  CORS_ORIGIN: process.env.CORS_ORIGIN,
+  FRONTEND_URL: process.env.FRONTEND_URL,
 });
 
 export default env;
