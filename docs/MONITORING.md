@@ -1,173 +1,338 @@
-# Metrics & Monitoring Guide
+# Monitoring & Observability Guide
 
-Complete guide for setting up and using the metrics monitoring stack for the backend template.
+Complete guide for the monitoring stack: **Prometheus** (metrics), **Grafana** (visualization), and **Loki** (logs).
 
 ## Overview
 
-The monitoring stack consists of:
+The observability stack provides:
 
-- **API Server** (`apps/api`): Exposes metrics at `/metrics` endpoint
-- **Docker Services**: Prometheus (metrics collection) + Grafana (visualization)
-- **Monitoring Config** (`monitoring/`): Prometheus and Grafana configuration files
+- **Metrics**: Prometheus collects time-series data from `/metrics` endpoint
+- **Logs**: Loki aggregates structured logs from Pino logger
+- **Visualization**: Grafana dashboards for metrics and log exploration
 
 ## Architecture
 
 ```
 ┌─────────────────┐
 │   API Server    │ :8000
-│  /metrics       │────┐
-└─────────────────┘    │
-                       │ scrapes
-                       ▼
+│  /metrics       │─────────────┐
+│  (pino-loki)    │─────────┐   │
+└─────────────────┘         │   │
+                            │   │ scrapes metrics
+                   pushes   │   │
+                   logs     │   │
+                            ▼   ▼
 ┌─────────────────┐    ┌─────────────────┐
-│   Prometheus    │ :9090 →   Grafana   │ :8001
-│ (time-series DB)│    │  (visualization)│
-└─────────────────┘    └─────────────────┘
+│      Loki       │    │   Prometheus    │
+│  (log storage)  │    │ (metrics store) │
+│     :3100       │    │     :9090       │
+└────────┬────────┘    └────────┬────────┘
+         │                      │
+         └──────────┬───────────┘
+                    │
+                    ▼
+           ┌─────────────────┐
+           │     Grafana     │ :8001
+           │ (visualization) │
+           └─────────────────┘
 ```
 
 ## Quick Start
 
-### 1. Start All Services (Database + Monitoring)
+### 1. Start All Services
 
 ```bash
-# Start everything with Docker
+# Start PostgreSQL + Prometheus + Grafana + Loki
 docker compose -f docker-compose.dev.yml up -d
 
 # Start the API server
 bun run dev --filter=@repo/api
 ```
 
-### 2. Access the Dashboards
+### 2. Access Dashboards
 
-- **API**: http://localhost:8000
-- **API Metrics**: http://localhost:8000/metrics (raw Prometheus format)
-- **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:8001
-  - Username: `admin`
-  - Password: `admin`
+| Service    | URL                           | Credentials   |
+| ---------- | ----------------------------- | ------------- |
+| API        | http://localhost:8000         | -             |
+| Metrics    | http://localhost:8000/metrics | -             |
+| Prometheus | http://localhost:9090         | -             |
+| Grafana    | http://localhost:8001         | admin / admin |
+| Loki       | http://localhost:3100         | -             |
 
-### 3. View the Dashboard
+### 3. View Dashboards
 
-1. Open Grafana at http://localhost:3001
-2. Login with admin/admin
-3. Navigate to **Dashboards** → **API Metrics Dashboard**
+1. Open Grafana at http://localhost:8001
+2. Login with `admin` / `admin`
+3. Navigate to **Dashboards**:
+   - **API Metrics Dashboard** - HTTP, database, OAuth metrics
+   - **API Logs Dashboard** - Log volume, errors, live log viewer
 
-## Available Metrics
+---
 
-### HTTP Metrics
+## Metrics
 
-- `http_requests_total` - Total HTTP requests
-  - Labels: `method`, `route`, `status_code`
-- `http_request_duration_seconds` - Request duration histogram
-  - Labels: `method`, `route`, `status_code`
+### Available Metrics
 
-### Database Metrics
+#### HTTP Metrics
 
-- `db_queries_total` - Total database queries
-  - Labels: `operation`, `table`
-- `db_query_duration_seconds` - Query duration histogram
-  - Labels: `operation`, `table`
-- `db_connection_pool_size` - Current connection pool size
-- `db_connection_pool_idle` - Idle connections in pool
+| Metric                          | Type      | Labels                           | Description         |
+| ------------------------------- | --------- | -------------------------------- | ------------------- |
+| `http_requests_total`           | Counter   | `method`, `route`, `status_code` | Total HTTP requests |
+| `http_request_duration_seconds` | Histogram | `method`, `route`, `status_code` | Request duration    |
 
-### OAuth Metrics
+#### Database Metrics
 
-- `oauth_requests_total` - Total OAuth requests
-  - Labels: `provider`
-- `oauth_success_total` - Successful OAuth completions
-  - Labels: `provider`
-- `oauth_failures_total` - Failed OAuth attempts
-  - Labels: `provider`, `reason`
+| Metric                      | Type      | Labels               | Description            |
+| --------------------------- | --------- | -------------------- | ---------------------- |
+| `db_queries_total`          | Counter   | `operation`, `table` | Total database queries |
+| `db_query_duration_seconds` | Histogram | `operation`, `table` | Query execution time   |
+| `db_connection_pool_size`   | Gauge     | -                    | Current pool size      |
+| `db_connection_pool_idle`   | Gauge     | -                    | Idle connections       |
+
+#### OAuth Metrics
+
+| Metric                 | Type    | Labels               | Description            |
+| ---------------------- | ------- | -------------------- | ---------------------- |
+| `oauth_events_total`   | Counter | `provider`, `event`  | OAuth events           |
+| `oauth_success_total`  | Counter | `provider`           | Successful completions |
+| `oauth_failures_total` | Counter | `provider`, `reason` | Failed attempts        |
+
+### Adding Custom Metrics
+
+#### 1. Define Metrics
+
+```typescript
+// apps/api/src/modules/mymodule/mymodule.metrics.ts
+import { Counter, Histogram } from "prom-client";
+import { metricsRegistry } from "@repo/shared/metrics";
+
+export const myOperationsTotal = new Counter({
+  name: "my_operations_total",
+  help: "Total number of operations",
+  labelNames: ["type", "status"],
+  registers: [metricsRegistry],
+});
+
+export const myOperationDuration = new Histogram({
+  name: "my_operation_duration_seconds",
+  help: "Operation duration in seconds",
+  labelNames: ["type"],
+  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5],
+  registers: [metricsRegistry],
+});
+```
+
+#### 2. Use Metrics
+
+```typescript
+import { myOperationsTotal, myOperationDuration } from "./mymodule.metrics";
+
+export async function performOperation(type: string) {
+  const timer = myOperationDuration.startTimer({ type });
+
+  try {
+    await doWork();
+    myOperationsTotal.inc({ type, status: "success" });
+  } catch (error) {
+    myOperationsTotal.inc({ type, status: "error" });
+    throw error;
+  } finally {
+    timer();
+  }
+}
+```
+
+### Useful PromQL Queries
+
+```promql
+# Request rate (last 5 minutes)
+rate(http_requests_total[5m])
+
+# Error rate percentage
+sum(rate(http_requests_total{status_code=~"5.."}[5m])) /
+sum(rate(http_requests_total[5m])) * 100
+
+# P95 latency by route
+histogram_quantile(0.95,
+  sum(rate(http_request_duration_seconds_bucket[5m])) by (le, route)
+)
+
+# Database query rate by operation
+sum(rate(db_queries_total[5m])) by (operation)
+
+# Slowest database queries (P99)
+histogram_quantile(0.99,
+  sum(rate(db_query_duration_seconds_bucket[5m])) by (le, table)
+)
+```
+
+---
+
+## Logging with Loki
+
+### How It Works
+
+The API uses **Pino** logger with **pino-loki** transport to ship logs directly to Loki:
+
+```typescript
+// Logs are automatically shipped to Loki
+logger.info("User logged in", {
+  module: "auth",
+  action: "login:success",
+  userId: "123",
+});
+```
+
+### Log Labels
+
+Logs are indexed by these labels for efficient querying:
+
+| Label         | Description                    |
+| ------------- | ------------------------------ |
+| `application` | Always "api"                   |
+| `environment` | "development" or "production"  |
+| `level`       | Log level (info, error, etc.)  |
+| `module`      | Source module (auth, db, etc.) |
+
+### Searching Logs in Grafana
+
+1. Go to **Explore** (compass icon)
+2. Select **Loki** datasource
+3. Use LogQL queries:
+
+```logql
+# All API logs
+{application="api"}
+
+# Error logs only
+{application="api", level="error"}
+
+# Auth module logs
+{application="api", module="auth"}
+
+# Search for specific text
+{application="api"} |= "login"
+
+# JSON field filtering
+{application="api"} | json | userId="123"
+
+# Error logs with stack traces
+{application="api"} |= "error" | json | line_format "{{.msg}} - {{.error}}"
+```
+
+### Log Levels
+
+| Level   | Usage                                           |
+| ------- | ----------------------------------------------- |
+| `trace` | Detailed debugging (rarely enabled)             |
+| `debug` | Development debugging                           |
+| `info`  | Normal operational events                       |
+| `warn`  | Potentially problematic situations              |
+| `error` | Error conditions requiring attention            |
+| `fatal` | Critical errors causing shutdown                |
+| `audit` | Security-sensitive actions (via `logger.audit`) |
+
+### Structured Logging Best Practices
+
+Always include context in logs:
+
+```typescript
+// Good - structured with module and action
+logger.info("OAuth callback received", {
+  module: "auth",
+  action: "oauth:callback",
+  provider: "google",
+  userId: user.id,
+});
+
+// Good - error with stack trace
+logger.error("Database query failed", {
+  module: "db",
+  action: "query:select",
+  error: err, // Error object serialized with stack
+  table: "users",
+});
+
+// Security audit
+logger.audit("Sensitive data accessed", {
+  module: "security",
+  action: "data:access",
+  userId: user.id,
+  resource: "user_tokens",
+});
+```
+
+---
 
 ## Dashboard Panels
 
-The pre-configured Grafana dashboard includes:
+### API Metrics Dashboard
 
-### Overview Row
+| Panel                      | Description                      |
+| -------------------------- | -------------------------------- |
+| Total Requests (5m)        | Request count in last 5 minutes  |
+| Error Rate                 | Percentage of 5xx responses      |
+| P95 Response Time          | 95th percentile latency          |
+| DB Queries (5m)            | Database query count             |
+| Request Rate by Method     | GET, POST, PUT, DELETE breakdown |
+| Request Rate by Status     | 2xx, 4xx, 5xx distribution       |
+| Response Time Percentiles  | P50, P95, P99 over time          |
+| P95 Response Time by Route | Per-endpoint performance         |
+| DB Queries by Operation    | SELECT, INSERT, UPDATE, DELETE   |
+| OAuth Events               | OAuth requests by provider       |
 
-1. **Total Requests (5m)** - Request volume in last 5 minutes
-2. **Error Rate** - Percentage of 5xx errors
-3. **P95 Response Time** - 95th percentile latency
-4. **DB Queries (5m)** - Database query volume
+### API Logs Dashboard
 
-### HTTP Performance
+| Panel                | Description                              |
+| -------------------- | ---------------------------------------- |
+| Total Errors         | Error count in time range                |
+| Total Warnings       | Warning count in time range              |
+| Security Events      | Audit log count                          |
+| Total Log Lines      | Overall log volume                       |
+| Log Volume by Level  | Stacked chart of log levels over time    |
+| Logs by Module       | Distribution across auth, db, http, etc. |
+| Error Rate Over Time | Error trend visualization                |
+| All Logs             | Live log viewer with JSON parsing        |
+| Error Logs           | Filtered error-only log viewer           |
 
-5. **Request Rate by Method** - GET, POST, PUT, DELETE, etc.
-6. **Request Rate by Status Code** - 2xx, 4xx, 5xx breakdown
-7. **Response Time Percentiles** - P50, P95, P99 latency
-8. **P95 Response Time by Route** - Per-endpoint performance
+---
 
-### Database Performance
+## Configuration
 
-9. **Database Queries by Operation** - SELECT, INSERT, UPDATE, DELETE
-10. **P95 Database Query Duration by Table** - Per-table query performance
+### Environment Variables
 
-### OAuth Analytics
+```bash
+# Loki host for log shipping (default: http://localhost:3100)
+LOKI_HOST=http://localhost:3100
 
-11. **OAuth Requests by Provider** - Google, GitHub, etc.
-
-## Prometheus Queries
-
-Access Prometheus UI at http://localhost:9090 to run custom queries:
-
-### Request Rate
-
-```promql
-# Total request rate
-rate(http_requests_total[5m])
-
-# Request rate by route
-sum(rate(http_requests_total[5m])) by (route)
+# Log level (default: info)
+LOG_LEVEL=debug
 ```
 
-### Error Rate
+### File Locations
 
-```promql
-# Overall error rate
-sum(rate(http_requests_total{status_code=~"5.."}[5m])) /
-sum(rate(http_requests_total[5m]))
-
-# Error rate by route
-sum(rate(http_requests_total{status_code=~"5.."}[5m])) by (route) /
-sum(rate(http_requests_total[5m])) by (route)
 ```
-
-### Latency
-
-```promql
-# P50 latency
-histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
-
-# P95 latency
-histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
-
-# P99 latency
-histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
-
-# P95 latency by route
-histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, route))
+infra/monitoring/
+├── prometheus.yml                    # Prometheus scrape config
+├── loki/
+│   └── loki-config.yml              # Loki storage config
+└── grafana/
+    ├── dashboards/
+    │   ├── api-metrics.json         # Metrics dashboard
+    │   └── api-logs.json            # Logs dashboard
+    └── provisioning/
+        ├── dashboards/
+        │   └── dashboards.yml       # Dashboard auto-loading
+        └── datasources/
+            └── datasources.yml      # Prometheus + Loki sources
 ```
-
-### Database Performance
-
-```promql
-# Query rate by operation
-sum(rate(db_query_duration_seconds_count[5m])) by (operation)
-
-# Query duration by table
-histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket[5m])) by (le, table))
-```
-
-## Configuration Files
 
 ### Prometheus Configuration
 
-**Location**: `infra/monitoring/prometheus.yml`
-
 ```yaml
+# infra/monitoring/prometheus.yml
 global:
   scrape_interval: 15s
-  evaluation_interval: 15s
 
 scrape_configs:
   - job_name: "api-server"
@@ -176,263 +341,159 @@ scrape_configs:
       - targets: ["host.docker.internal:8000"]
 ```
 
-**Key Settings**:
+### Loki Configuration
 
-- `scrape_interval`: How often to scrape metrics (15s)
-- `targets`: Where to scrape from (API server)
+```yaml
+# infra/monitoring/loki/loki-config.yml
+auth_enabled: false
 
-### Grafana Datasource
+server:
+  http_listen_port: 3100
 
-**Location**: `infra/monitoring/grafana/provisioning/datasources/prometheus.yml`
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /loki/index
+    cache_location: /loki/cache
+  filesystem:
+    directory: /loki/chunks
 
-Automatically provisions Prometheus as the default datasource.
-
-### Grafana Dashboards
-
-**Location**: `infra/monitoring/grafana/dashboards/`
-
-Place JSON dashboard files here for automatic loading.
-
-## Docker Compose Configuration
-
-**Location**: `docker-compose.dev.yml`
-
-Services:
-
-- `postgres`: PostgreSQL database (port 5432)
-- `prometheus`: Metrics collection (port 9090)
-- `grafana`: Metrics visualization (port 8001)
-
-All services share the `backend-network` network.
-
-## Adding Custom Metrics
-
-### 1. Define Metrics
-
-Create a metrics file in your module:
-
-```typescript
-// apps/api/src/modules/mymodule/mymodule.metrics.ts
-import { Counter, Histogram } from "prom-client";
-import { metricsRegistry } from "@repo/shared/metrics";
-
-export const myCustomCounter = new Counter({
-  name: "my_custom_operations_total",
-  help: "Total number of custom operations",
-  labelNames: ["operation_type", "status"],
-  registers: [metricsRegistry],
-});
-
-export const myCustomDuration = new Histogram({
-  name: "my_custom_operation_duration_seconds",
-  help: "Duration of custom operations",
-  labelNames: ["operation_type"],
-  buckets: [0.1, 0.5, 1, 2, 5],
-  registers: [metricsRegistry],
-});
+limits_config:
+  retention_period: 168h # 7 days
 ```
 
-### 2. Use Metrics
-
-```typescript
-// In your handler or service
-import { myCustomCounter, myCustomDuration } from "./mymodule.metrics";
-
-export async function myOperation() {
-  const timer = myCustomDuration.startTimer({ operation_type: "batch" });
-
-  try {
-    // Your operation
-    await doSomething();
-
-    myCustomCounter.inc({ operation_type: "batch", status: "success" });
-  } catch (error) {
-    myCustomCounter.inc({ operation_type: "batch", status: "error" });
-    throw error;
-  } finally {
-    timer();
-  }
-}
-```
-
-### 3. Create Dashboard Panel
-
-1. Open Grafana
-2. Go to your dashboard
-3. Click "Add panel"
-4. Enter your PromQL query:
-   ```promql
-   rate(my_custom_operations_total[5m])
-   ```
-5. Configure visualization and save
-
-## Managing Services
-
-### Start Services
-
-```bash
-# Start all services (Docker + API + Metrics)
-bun run dev
-
-# Start Docker services only
-bun run dev:services
-
-# Start specific Docker service
-docker compose -f docker-compose.dev.yml up -d prometheus
-```
-
-### Stop Services
-
-```bash
-# Stop all Docker services
-bun run stop
-
-# Stop and remove volumes
-docker compose -f docker-compose.dev.yml down -v
-```
-
-### View Logs
-
-```bash
-# All Docker services
-bun run logs
-
-# Specific service
-docker compose -f docker-compose.dev.yml logs -f prometheus
-docker compose -f docker-compose.dev.yml logs -f grafana
-```
-
-### Restart Services
-
-```bash
-# Restart all
-docker compose -f docker-compose.dev.yml restart
-
-# Restart specific service
-docker compose -f docker-compose.dev.yml restart prometheus
-```
+---
 
 ## Troubleshooting
 
-### Prometheus Can't Connect to API
-
-**Symptom**: No data in Grafana, Prometheus targets show "down"
-
-**Solutions**:
-
-1. Verify API is running: `curl http://localhost:3000/metrics`
-2. Check Docker can access host:
-   ```bash
-   docker exec backend-prometheus wget -O- http://host.docker.internal:3000/metrics
-   ```
-3. On Linux, replace `host.docker.internal` with `172.17.0.1` in `prometheus.yml`
-
 ### No Data in Grafana
 
-**Symptom**: Dashboard panels show "No data"
+1. **Check Prometheus targets**: http://localhost:9090/targets
+2. **Verify API is exposing metrics**: `curl http://localhost:8000/metrics`
+3. **Check Loki is receiving logs**: `curl http://localhost:3100/ready`
+4. **Verify datasources in Grafana**: Settings → Data Sources
 
-**Solutions**:
+### Prometheus Can't Scrape API
 
-1. Check Prometheus targets: http://localhost:9090/targets
-2. Verify datasource in Grafana settings
-3. Ensure time range includes recent data
-4. Run query in Prometheus UI first to verify data exists
+```bash
+# Test from within Docker network
+docker exec prometheus wget -qO- http://host.docker.internal:8000/metrics
 
-### Grafana Won't Start
+# On Linux, use host IP instead
+# Replace host.docker.internal with 172.17.0.1
+```
 
-**Symptom**: Container keeps restarting
+### Logs Not Appearing in Loki
 
-**Solutions**:
-
-1. Check logs: `docker compose -f docker-compose.dev.yml logs grafana`
-2. Verify volume permissions
-3. Remove and recreate volume:
+1. **Check LOKI_HOST env var** is set correctly
+2. **Verify Loki is running**: `docker compose logs loki`
+3. **Check pino-loki errors** in API console output
+4. **Test Loki push API**:
    ```bash
-   docker compose -f docker-compose.dev.yml down -v
-   docker compose -f docker-compose.dev.yml up -d
+   curl -X POST http://localhost:3100/loki/api/v1/push \
+     -H "Content-Type: application/json" \
+     -d '{"streams":[{"stream":{"test":"true"},"values":[["'$(date +%s)000000000'","test log"]]}]}'
    ```
 
-### Dashboard Shows Old Data
+### Dashboard Shows Stale Data
 
-**Symptom**: Stale metrics or missing recent data
+1. Check refresh interval (top-right in Grafana)
+2. Verify time range includes recent data
+3. For Prometheus: `curl -X POST http://localhost:9090/-/reload`
+4. For Grafana: Hard refresh the page (Cmd+Shift+R)
 
-**Solutions**:
-
-1. Check dashboard refresh interval (top-right)
-2. Verify Prometheus scrape interval in config
-3. Reload Prometheus config:
-   ```bash
-   curl -X POST http://localhost:9090/-/reload
-   ```
+---
 
 ## Production Considerations
 
 ### Security
 
-1. **Change Grafana credentials**:
+```yaml
+# Change default Grafana password
+environment:
+  - GF_SECURITY_ADMIN_PASSWORD=secure-password
+# Restrict Loki access - don't expose port 3100 publicly
+```
 
-   ```yaml
-   # docker-compose.dev.yml
-   environment:
-     - GF_SECURITY_ADMIN_PASSWORD=your-secure-password
-   ```
+### Retention
 
-2. **Don't expose ports publicly**: Use reverse proxy
+```yaml
+# Prometheus retention (default 15 days)
+command:
+  - "--storage.tsdb.retention.time=30d"
 
-3. **Enable authentication**: Configure Grafana auth providers
+# Loki retention (in loki-config.yml)
+limits_config:
+  retention_period: 720h # 30 days
+```
 
 ### Performance
 
-1. **Increase Prometheus retention**:
-
-   ```yaml
-   command:
-     - "--storage.tsdb.retention.time=30d"
-   ```
-
-2. **Adjust scrape interval**: Balance between data granularity and load
-
-3. **Use recording rules**: Pre-calculate expensive queries
+1. **Log sampling** for high-traffic routes
+2. **Label cardinality** - avoid dynamic labels (user IDs, timestamps)
+3. **Recording rules** for expensive PromQL queries
+4. **Log level** - use `info` in production, `debug` only when needed
 
 ### Scaling
 
-1. **Multiple API instances**: Update Prometheus config:
-
-   ```yaml
-   static_configs:
-     - targets:
-         - "api-1:3000"
-         - "api-2:3000"
-   ```
-
-2. **Service discovery**: Use Prometheus service discovery for dynamic targets
-
-3. **Federation**: Use Prometheus federation for distributed setups
-
-### Backup
-
-```bash
-# Backup Grafana dashboards
-docker exec backend-grafana grafana-cli admin export-dashboard > backup.json
-
-# Backup Prometheus data
-docker cp backend-prometheus:/prometheus ./prometheus-backup
+```yaml
+# Multiple API instances
+scrape_configs:
+  - job_name: "api-servers"
+    static_configs:
+      - targets:
+          - "api-1:8000"
+          - "api-2:8000"
 ```
 
-## Best Practices
+---
 
-1. **Label Cardinality**: Keep label values bounded (don't use user IDs, timestamps)
-2. **Naming Convention**: Use `<namespace>_<subsystem>_<name>_<unit>`
-3. **Metric Types**:
-   - Counter: Monotonically increasing values (requests, errors)
-   - Histogram: Distributions (latency, request size)
-   - Gauge: Values that can go up/down (connection pool, queue size)
-4. **Aggregation**: Design metrics for aggregation (use labels wisely)
-5. **Documentation**: Add `help` text to all custom metrics
+## Quick Reference
 
-## Resources
+### Start/Stop Services
 
-- [Prometheus Documentation](https://prometheus.io/docs/)
-- [Grafana Documentation](https://grafana.com/docs/)
-- [PromQL Guide](https://prometheus.io/docs/prometheus/latest/querying/basics/)
-- [Best Practices](https://prometheus.io/docs/practices/naming/)
+```bash
+# Start all
+docker compose -f docker-compose.dev.yml up -d
+
+# Stop all
+docker compose -f docker-compose.dev.yml down
+
+# View logs
+docker compose -f docker-compose.dev.yml logs -f grafana
+docker compose -f docker-compose.dev.yml logs -f loki
+docker compose -f docker-compose.dev.yml logs -f prometheus
+```
+
+### Useful URLs
+
+- **API Docs**: http://localhost:8000/docs
+- **Raw Metrics**: http://localhost:8000/metrics
+- **Prometheus UI**: http://localhost:9090
+- **Loki API**: http://localhost:3100/ready
+- **Grafana**: http://localhost:8001
+
+### LogQL Cheatsheet
+
+```logql
+# Filter by label
+{application="api", level="error"}
+
+# Text search
+{application="api"} |= "error"
+{application="api"} != "health"
+
+# Regex search
+{application="api"} |~ "user.*created"
+
+# JSON parsing
+{application="api"} | json
+
+# Field extraction
+{application="api"} | json | userId != ""
+
+# Line formatting
+{application="api"} | json | line_format "{{.level}}: {{.msg}}"
+
+# Aggregations
+sum(count_over_time({application="api"}[5m])) by (level)
+```

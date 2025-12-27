@@ -2,249 +2,248 @@
 
 ## Project Overview
 
-This is a **Turborepo monorepo** with **Bun + Hono + TypeScript + PostgreSQL + Drizzle ORM** services. The main API service (`apps/api`) provides OAuth authentication. Runtime: Bun (not Node.js).
+**Turborepo monorepo** with **Bun + Hono + TypeScript + PostgreSQL + Drizzle ORM**. Runtime: **Bun** (not Node.js).
 
 ## Monorepo Structure
 
-- `apps/api/` - Main API service with OAuth and HTTP endpoints
-- `packages/shared/` - Shared types, utilities, and constants across services
-- `packages/db/` - Shared database package with schemas, services, and connection utilities
-- `turbo.json` - Turborepo task configuration (build, dev, db commands)
-- Root `package.json` - Workspace configuration with `workspaces: ["apps/*", "packages/*"]`
+```
+apps/api/           # Main API service (OAuth, HTTP endpoints)
+packages/config/    # Environment validation (Zod), status codes
+packages/db/        # Database schemas, services, connection
+packages/shared/    # Utilities, middleware, logging, metrics
+infra/monitoring/   # Prometheus, Grafana, Loki configs
+```
 
-**Adding new services**: Create `apps/{service}` with `package.json` containing `"name": "@repo/{service}"`. Add dependencies: `"@repo/shared": "workspace:*"` and `"@repo/db": "workspace:*"`. Run `bun install` to link workspaces.
+**Adding new services**: Create `apps/{service}/package.json` with `"name": "@repo/{service}"`, add `"@repo/shared": "workspace:*"` and `"@repo/db": "workspace:*"`, run `bun install`.
 
-## Architecture Patterns
+## Module Structure
 
-### Module Structure (API Service)
+Features live in `apps/api/src/modules/{feature}/`:
 
-- **Modular feature organization**: Each feature lives in `apps/api/src/modules/{feature}/` with subdirectories:
-  - `{feature}.routes.ts` - Hono router configuration
-  - `handlers/` - Request handlers (use Hono's factory pattern)
-  - `services/` - Business logic
-  - `providers/` - External integrations (e.g., OAuth providers)
+- `{feature}.routes.ts` - Router with rate limiting applied
+- `handlers/` - Request handlers (route + handler colocated)
+- `services/` - Business logic
+- `providers/` - External integrations (factory pattern)
 
-Example: `apps/api/src/modules/auth/` contains `auth.routes.ts`, `handlers/get-oauth.handler.ts`, `providers/google.provider.ts`
+## Handler Pattern (Critical)
 
-### Handler Pattern
-
-**Always use the RouteHandler pattern** with colocated route definitions:
+**Always colocate route definition with handler**:
 
 ```typescript
+// apps/api/src/modules/auth/handlers/get-oauth.handler.ts
 import { createRoute, z } from "@hono/zod-openapi";
 import type { RouteHandler } from "@hono/zod-openapi";
-import { StatusCodes, errorResponseSchemas } from "@repo/config";
+import { StatusCodes } from "@repo/config";
+import { errorResponseSchemas } from "@repo/shared";
 
-// Define route with OpenAPI schema
 export const myRoute = createRoute({
   method: "get",
-  path: "/resource",
+  path: "/v1/resource/{id}",
   tags: ["Resource"],
   summary: "Get resource",
   request: {
-    query: z.object({ id: z.string() }),
+    params: z.object({ id: z.string() }),
   },
   responses: {
     [StatusCodes.HTTP_200_OK]: {
       content: { "application/json": { schema: z.object({ data: z.any() }) } },
       description: "Success",
     },
-    ...errorResponseSchemas,
+    ...errorResponseSchemas, // Always include - provides 400,401,403,404,429,500
   },
 });
 
-// Implement handler with type safety
 export const myHandler: RouteHandler<typeof myRoute> = async (c) => {
-  const { id } = c.req.valid("query");
+  const { id } = c.req.valid("param"); // "param" not "params"
   return c.json({ data: {} }, StatusCodes.HTTP_200_OK);
 };
 ```
 
-### Database Patterns
+**Route registration** (keep minimal - just imports and `.openapi()` calls):
 
-1. **Shared database package**: Database code lives in `packages/db/src/`
+```typescript
+// apps/api/src/modules/auth/auth.routes.ts
+import { createRouter, authRateLimiter } from "@repo/shared";
+import { myRoute, myHandler } from "./handlers/my.handler";
 
-   - `connection.ts` - Database connection management (use `initializeDB()` before `connectDB()`)
-   - `schema/{domain}/` - Drizzle ORM table schemas
-   - `services/{domain}.service.ts` - CRUD operations organized by domain
+const router = createRouter();
+router.use(authRateLimiter); // Apply rate limiting at route level
+router.openapi(myRoute, myHandler);
+export default router;
+```
 
-2. **Using the database**:
+## Database Patterns
 
-   ```typescript
-   import { initializeDB, connectDB, UsersService, SessionService } from "@repo/db";
+**Initialize before connecting** (in app startup):
 
-   // Initialize with config (in app startup)
-   initializeDB({
-     connectionString: env.DATABASE_URL,
-     ssl: env.NODE_ENV === "development" ? false : { rejectUnauthorized: false },
-   });
-   await connectDB();
+```typescript
+import { initializeDB, connectDB, UsersService } from "@repo/db";
 
-   // Use services with optional logger
-   const user = await UsersService.create(payload, logger, { tx });
-   ```
+initializeDB({ connectionString: env.DATABASE_URL, ssl: false });
+await connectDB();
+```
 
-3. **Casing**: Drizzle uses `snake_case` for DB columns (configured in `apps/api/drizzle.config.ts`)
+**Service namespace pattern** with optional logger and transaction:
 
-4. **Service namespace pattern**: Services use namespace exports with optional logger parameter:
-
-   ```typescript
-   export namespace UsersService {
-     export async function create(
-       payload: NewUser,
-       logger?: {
-         audit: (msg: string, meta: any) => void;
-         error: (msg: string, meta: any) => void;
-       },
-       options?: { tx?: DBTransaction },
-     ) {
-       const queryClient = options?.tx || db;
-       return queryClient.insert(usersTable).values(payload).returning();
-     }
-   }
-   ```
-
-5. **Transaction support**: Services accept optional `tx` parameter for transaction support
-
-### Validation & Error Handling
-
-- **Define validation in route schema** using Zod:
-  ```typescript
-  request: {
-    query: z.object({ provider: z.nativeEnum(SessionProvider) }),
+```typescript
+// packages/db/src/services/users.service.ts
+export namespace UsersService {
+  export async function create(
+    payload: NewUser,
+    logger?: { audit: (msg: string, meta: any) => void; error: (msg: string, meta: any) => void },
+    options?: { tx?: DBTransaction },
+  ) {
+    const queryClient = options?.tx || db;
+    const [user] = await withMetrics("insert", "users", async () =>
+      queryClient.insert(usersTable).values(payload).returning(),
+    );
+    logger?.audit("User created", { module: "users", action: "service:create" });
+    return user;
   }
-  ```
-- **Global error handling** via `createApp()` with `defaultHook` for validation errors
-- **Throw errors** with `HTTPException` and `StatusCodes`:
-  ```typescript
-  throw new HTTPException(StatusCodes.HTTP_400_BAD_REQUEST, {
-    res: c.json({ message: "Error message" }),
-  });
-  ```
-- **Always include error schemas** in route responses:
-  ```typescript
-  import { errorResponseSchemas } from "@repo/config";
-  responses: {
-    [StatusCodes.HTTP_200_OK]: { /* ... */ },
-    ...errorResponseSchemas,  // 400, 401, 403, 404, 429, 500
-  }
-  ```
+}
+```
 
-### OAuth Architecture
+**Soft deletes**: Tables use `deletedAt` timestamp - filter with `isNull(table.deletedAt)`
 
-**Provider factory pattern** at `apps/api/src/modules/auth/providers/`:
+## Logging
 
-- All providers implement `OAuthProvider` interface from `base.provider.ts`
-- Registered in `oauthProviderFactory` (see `providers/index.ts`)
-- Routes are generic: `/oauth/:provider` and `/oauth/:provider/callback`
-- To add a new provider: implement `OAuthProvider`, register in factory
-
-### Security Patterns
-
-1. **Encryption**: Use `encrypt()`/`decrypt()` from `@/lib/encryption` for sensitive data (refresh tokens). Uses AES-256-GCM.
-2. **JWT**: Use `signJwt()`/`verifyJwt()` from `@/lib/jwt` for tokens
-3. **CSRF protection**: OAuth uses signed state tokens (10min expiry)
-
-### Logging
-
-**Structured logging** with Winston (`@/lib/logger`):
+Use structured logging with `logger` from `@repo/shared`:
 
 ```typescript
 logger.info("message", { module: "auth", action: "oauth:callback", userId: "123" });
-logger.error("error", { module: "db", action: "query", error: err });
+logger.error("error occurred", { module: "db", action: "query", error: err });
 logger.audit("sensitive action", { module: "users", action: "service:create" });
 ```
 
-Modules: `"db" | "auth" | "users" | "system" | "session" | "security"`
+Modules: `"db" | "auth" | "users" | "system" | "session" | "security" | "http"`
 
-### Rate Limiting
+## Rate Limiting
 
-**Three tiers** available in `packages/shared/src/rate-limiter.ts`:
+Three tiers in `packages/shared/src/rate-limiter.ts`:
 
-1. **globalRateLimiter**: 100 requests per 15 minutes (applied to entire app)
-2. **authRateLimiter**: 20 requests per 15 minutes (for auth routes)
-3. **strictRateLimiter**: 10 requests per 15 minutes (for sensitive operations)
+- `globalRateLimiter`: 1000 req/15min (applied globally in index.ts)
+- `authRateLimiter`: 100 req/15min (for auth routes)
+- `strictRateLimiter`: 50 req/15min (for sensitive operations)
 
-Apply to routes:
+## OAuth & Security
+
+**Provider Factory Pattern** - Add new OAuth providers by implementing `OAuthProvider` interface:
 
 ```typescript
-const router = createRouter().use(authRateLimiter).openapi(route, handler);
+// apps/api/src/modules/auth/providers/base.provider.ts
+interface OAuthProvider {
+  getName(): string;
+  getAuthorizationUrl(state: string): string;
+  exchangeCodeForToken(code: string): Promise<OAuthTokenResponse>;
+  refreshAccessToken(refreshToken: string): Promise<OAuthTokenResponse>;
+  getUserInfo(accessToken: string): Promise<OAuthUserInfo>;
+}
+
+// Register in apps/api/src/modules/auth/providers/index.ts
+this.register(SessionProvider.GITHUB, () => new GitHubOAuthProvider());
 ```
 
-### CORS Configuration
+**CSRF Protection** - OAuth uses signed JWT state tokens (10min expiry):
 
-**Environment-based** CORS in `apps/api/src/index.ts`:
+```typescript
+import { generateStateToken, signJwt, verifyJwt } from "@repo/shared";
+const state = signJwt({ state: generateStateToken() }, env.JWT_SECRET, { expiresIn: "10m" });
+```
 
-- Uses `CORS_ORIGIN` env var (comma-separated or `*`)
-- Credentials support enabled
-- Configurable allowed headers and methods
+**Encryption** - AES-256-GCM for sensitive data (refresh tokens):
 
-### OpenAPI Documentation
+```typescript
+import { encrypt, decrypt } from "@repo/shared";
+const encrypted = encrypt(refreshToken, env.ENCRYPTION_KEY); // Returns { data, iv, tag }
+const decrypted = decrypt(encrypted.data, encrypted.iv, encrypted.tag, env.ENCRYPTION_KEY);
+```
 
-- **Scalar UI** at `/docs` endpoint
-- Configured via `configureOpenAPI()` from `@repo/shared`
-- Routes defined with `createRoute()` from `@hono/zod-openapi`
-- Registered with `.openapi(route, handler)` on OpenAPIHono router
+**JWT Tokens** - Use `signJwt()`/`verifyJwt()` from `@repo/shared` for access tokens.
 
-## Environment & Configuration
+## Metrics & Monitoring
 
-- **Env validation**: All env vars in `packages/config/src/env.ts` with Zod schemas
-- **Path aliases**: Use `@/*` for `src/*` (configured in `apps/api/tsconfig.json`)
-- **Status codes**: Import `StatusCodes` from `@repo/config` (never hardcode)
-- **Error schemas**: Import `errorResponseSchemas` from `@repo/config`
-- **Shared packages**: Import from `@repo/shared` for utilities, error handling, rate limiting
-- **Database package**: Import from `@repo/db` for database schemas, services, and types
+**Stack**: Prometheus (metrics) + Grafana (dashboards) + Loki (logs)
 
-## Development Workflows
+**Accessing metrics**: `GET /metrics` endpoint (Prometheus format)
 
-### Running Services
+**HTTP Metrics** (auto-collected via `metricsMiddleware()`):
+
+- `http_request_duration_seconds` - Request latency histogram
+- `http_requests_total` - Request counter by method/route/status
+- `http_errors_total` - Error counter
+
+**Database Metrics** - Wrap queries with `withMetrics()`:
+
+```typescript
+import { withMetrics } from "@repo/db";
+const [user] = await withMetrics("insert", "users", async () =>
+  db.insert(usersTable).values(payload).returning(),
+);
+```
+
+Tracked metrics:
+
+- `db_query_duration_seconds` - Query latency by operation/table
+- `db_connections_active` - Active connection count
+- `db_errors_total` - Error counter by operation/type
+
+**Domain-specific metrics** - Create in module (e.g., `auth.metrics.ts`):
+
+```typescript
+// apps/api/src/modules/auth/auth.metrics.ts
+import { Counter } from "prom-client";
+
+export const oauthEventsCounter = new Counter({
+  name: "oauth_events_total",
+  help: "Total number of OAuth events",
+  labelNames: ["provider", "event_type"],
+});
+
+// Usage in handler
+oauthEventsCounter.inc({ provider: "google", event_type: "login_success" });
+```
+
+**Grafana dashboards**: Pre-configured in `infra/monitoring/grafana/dashboards/`
+
+## Error Handling
+
+```typescript
+import { HTTPException } from "hono/http-exception";
+throw new HTTPException(StatusCodes.HTTP_400_BAD_REQUEST, {
+  message: "Error description",
+});
+```
+
+## Development Commands
 
 ```bash
-bun run dev                      # Run all services with Turborepo
-bun run dev --filter=@repo/api   # Run specific service
+bun run dev                      # Run all services
+bun run dev --filter=@repo/api   # Run API only
+bun run db:generate              # Generate migrations
+bun run db:migrate               # Apply migrations
+docker compose -f docker-compose.dev.yml up -d  # Start PostgreSQL + monitoring
 ```
 
-### Database Migrations
+## Key Files
 
-```bash
-bun run db:generate              # Generate migrations (runs in all apps with drizzle.config.ts)
-bun run db:migrate               # Apply migrations (runs in all apps)
-```
-
-**Note**: Drizzle config in `apps/api/drizzle.config.ts` points to `packages/db/src/schema/**/*.ts`
-
-### Local PostgreSQL
-
-```bash
-cd apps/api
-docker compose -f docker-compose.dev.yml up -d
-```
-
-Database: `backend-template` on port 5432
-
-## Key Files to Reference
-
-- [apps/api/src/modules/auth/auth.routes.ts](apps/api/src/modules/auth/auth.routes.ts) - Route registration pattern
-- [apps/api/src/modules/auth/handlers/get-oauth.handler.ts](apps/api/src/modules/auth/handlers/get-oauth.handler.ts) - RouteHandler pattern example
-- [apps/api/src/modules/auth/providers/base.provider.ts](apps/api/src/modules/auth/providers/base.provider.ts) - Provider interface
-- [packages/db/src/connection.ts](packages/db/src/connection.ts) - DB setup with transaction types
+- [apps/api/src/modules/auth/handlers/get-oauth.handler.ts](apps/api/src/modules/auth/handlers/get-oauth.handler.ts) - Handler pattern example
+- [apps/api/src/modules/auth/auth.routes.ts](apps/api/src/modules/auth/auth.routes.ts) - Route registration
+- [apps/api/src/modules/auth/providers/base.provider.ts](apps/api/src/modules/auth/providers/base.provider.ts) - OAuth provider interface
+- [apps/api/src/modules/auth/providers/index.ts](apps/api/src/modules/auth/providers/index.ts) - Provider factory registration
+- [apps/api/src/modules/auth/auth.metrics.ts](apps/api/src/modules/auth/auth.metrics.ts) - Domain metrics example
 - [packages/db/src/services/users.service.ts](packages/db/src/services/users.service.ts) - Service namespace pattern
-- [packages/shared/src/create-app.ts](packages/shared/src/create-app.ts) - App factory with error handling
-- [packages/shared/src/error-schemas.ts](packages/shared/src/error-schemas.ts) - OpenAPI error schemas
-- [packages/shared/src/rate-limiter.ts](packages/shared/src/rate-limiter.ts) - Rate limiting configurations
-- [packages/shared/src/middlewares/custom-z-validator.ts](packages/shared/src/middlewares/custom-z-validator.ts) - Validation wrapper
+- [packages/db/src/connection.ts](packages/db/src/connection.ts) - DB initialization
+- [packages/db/src/utils/metrics-wrapper.ts](packages/db/src/utils/metrics-wrapper.ts) - DB metrics wrapper
+- [packages/shared/src/create-app.ts](packages/shared/src/create-app.ts) - App factory with validation hook
+- [packages/shared/src/error-schemas.ts](packages/shared/src/error-schemas.ts) - OpenAPI error responses
+- [packages/shared/src/encryption.ts](packages/shared/src/encryption.ts) - AES-256-GCM encryption
 
-## Project-Specific Conventions
+## Conventions
 
-1. **Route definitions colocated with handlers** - export both `route` and `handler` from same file
-2. **Routes file simplified** - just imports and registrations, no duplicate schemas
-3. **Use RouteHandler<typeof route>** for type-safe handlers
-4. **Always use StatusCodes enum** - import from `@repo/config`, never hardcode numbers
-5. **Always include errorResponseSchemas** in route responses
-6. **Soft deletes**: Tables use `deletedAt` timestamp pattern
-7. **All timestamps** use `{ withTimezone: true }`
-8. **Service errors**: Always pass logger to db services and log with module/action metadata
-9. **Route versioning**: All routes under `/v1/` prefix
-10. **OpenAPI documentation**: All routes must have proper OpenAPI schemas
-11. **Rate limiting**: Apply appropriate limiter (global/auth/strict) to routes
-12. **No block comments** in code (// ===== Section =====)
+1. **Path params use `{param}`** in route path, access via `c.req.valid("param")`
+2. **Always use `StatusCodes` enum** from `@repo/config` - never hardcode
+3. **Always spread `...errorResponseSchemas`** in route responses
+4. **All routes under `/v1/` prefix**
+5. **Timestamps**: Always `{ withTimezone: true }`
+6. **Casing**: Drizzle uses `snake_case` for DB columns
+7. **Path aliases**: Use `@/*` for `src/*` in apps
