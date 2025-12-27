@@ -5,6 +5,7 @@ import { OAuthService } from "../services";
 import { oauthProviderFactory } from "../providers";
 import { RouteHandler, createRoute, z } from "@hono/zod-openapi";
 import { SessionProvider } from "@repo/db";
+import { env } from "@/env";
 
 export const getOauthProviderRoute = createRoute({
   method: "get",
@@ -75,6 +76,7 @@ export const getOauthHandler: RouteHandler<GetOauthProviderRoute> = (c) => {
   // Sign the state token with JWT to enable server-side validation
   const signedState = signJwt(
     { state: stateToken },
+    env.JWT_SECRET,
     {
       expiresIn: "10m", // State should expire after 10 minutes
     },

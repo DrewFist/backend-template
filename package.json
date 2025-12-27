@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "dev": "turbo dev",
+    "dev:api": "turbo dev --filter=@repo/api",
+    "dev:metrics": "turbo dev --filter=@repo/metrics",
     "build": "turbo build",
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",

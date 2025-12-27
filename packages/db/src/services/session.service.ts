@@ -1,6 +1,7 @@
 import { sessionsTable, type NewSession } from "../schema";
 import { db, type DBTransaction } from "../connection";
 import { eq } from "drizzle-orm";
+import { withMetrics } from "../utils/metrics-wrapper";
 
 export namespace SessionService {
   /**
@@ -22,7 +23,10 @@ export namespace SessionService {
   ) {
     const queryClient = options?.tx ?? db;
     try {
-      const [session] = await queryClient.insert(sessionsTable).values(payload).returning();
+      const result = await withMetrics("insert", "sessions", async () =>
+        queryClient.insert(sessionsTable).values(payload).returning(),
+      );
+      const [session] = result;
 
       logger?.audit("Created new session", {
         module: "session",
@@ -61,9 +65,11 @@ export namespace SessionService {
   ) {
     const queryClient = options?.tx ?? db;
     try {
-      return await queryClient.query.sessionsTable.findFirst({
-        where: eq(sessionsTable.id, id),
-      });
+      return await withMetrics("select", "sessions", async () =>
+        queryClient.query.sessionsTable.findFirst({
+          where: eq(sessionsTable.id, id),
+        }),
+      );
     } catch (err) {
       logger?.error("Error finding session by id", {
         module: "session",

@@ -1,5 +1,5 @@
 services:
-  "backend-template-service":
+  postgres:
     image: "postgres"
     container_name: "backend-template-postgres"
     environment:
@@ -7,10 +7,57 @@ services:
       POSTGRES_PASSWORD: "postgres"
       POSTGRES_DB: "backend-template"
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - backend-template-postgres-data:/data
+      - postgres-data:/var/lib/postgresql
     restart: always
+    networks:
+      - backend-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: backend-template-prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    environment:
+      - API_METRICS_TARGET=${API_METRICS_TARGET:-host.docker.internal:8000}
+      - ENVIRONMENT=${NODE_ENV:-development}
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.template.yml:ro
+      - prometheus-data:/prometheus
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sed 's|API_METRICS_TARGET_PLACEHOLDER|'"$$API_METRICS_TARGET"'|g; s|ENVIRONMENT_PLACEHOLDER|'"$$ENVIRONMENT"'|g' /etc/prometheus/prometheus.template.yml > /etc/prometheus/prometheus.yml
+        exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --web.console.libraries=/etc/prometheus/console_libraries --web.console.templates=/etc/prometheus/consoles --web.enable-lifecycle
+    restart: unless-stopped
+    networks:
+      - backend-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: backend-template-grafana
+    ports:
+      - "${GRAFANA_PORT:-8001}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    restart: unless-stopped
+    networks:
+      - backend-network
+    depends_on:
+      - prometheus
 
 volumes:
-  backend-template-postgres-data:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  backend-network:
+    driver: bridge

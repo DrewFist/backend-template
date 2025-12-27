@@ -1,5 +1,5 @@
 // Export connection utilities
-export { db, connectDB, closeDB, type DBTransaction } from "./connection";
+export { db, connectDB, closeDB, initializeDB, type DBTransaction } from "./connection";
 
 // Export schemas
 export * from "./schema";

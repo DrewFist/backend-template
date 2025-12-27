@@ -1,4 +1,4 @@
-import { env } from "@repo/config";
+import { env } from "./src/env";
 import "dotenv/config";
 import { defineConfig } from "drizzle-kit";
 

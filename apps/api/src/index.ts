@@ -1,10 +1,24 @@
-import { env } from "@repo/config";
+import { env } from "@/env";
 import { serve, ServerType } from "@hono/node-server";
 import { cors } from "hono/cors";
 import packageJson from "../package.json";
-import { configureOpenAPI, createApp, logger, globalRateLimiter } from "@repo/shared";
-import { closeDB, connectDB } from "@repo/db";
+import {
+  configureOpenAPI,
+  createApp,
+  logger,
+  globalRateLimiter,
+  requestLogger,
+  metricsMiddleware,
+} from "@repo/shared";
+import { getMetrics, getMetricsContentType } from "@repo/shared/metrics";
+import { initializeDB, connectDB, closeDB } from "@repo/db";
 import authRoutes from "./modules/auth/auth.routes";
+
+// Initialize database with config
+initializeDB({
+  connectionString: env.DATABASE_URL,
+  ssl: env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+});
 
 const app = createApp();
 
@@ -23,12 +37,26 @@ app.use(
   }),
 );
 
+// Apply request logging middleware
+app.use(requestLogger());
+
+// Apply metrics middleware
+app.use(metricsMiddleware());
+
 // Apply global rate limiter
 app.use(globalRateLimiter);
 
 app.get("/health", (c) => {
   return c.json({
     message: "Server is up and running!!",
+  });
+});
+
+// Prometheus metrics endpoint
+app.get("/metrics", async (c) => {
+  const metrics = await getMetrics();
+  return c.text(metrics, 200, {
+    "Content-Type": getMetricsContentType(),
   });
 });
 
@@ -59,7 +87,7 @@ async function start() {
     logger.error("Failed to start server", {
       module: "system",
       action: "startup",
-      error: error,
+      error: error as Error,
     });
     process.exit(1);
   }
@@ -86,7 +114,7 @@ async function stop() {
     logger.error("Failed to close DB", {
       module: "db",
       action: "shutdown",
-      error: error,
+      error: error as Error,
     });
   }
 
@@ -96,7 +124,7 @@ async function stop() {
       logger.error("Force closed server", {
         module: "system",
         action: "shutdown",
-        error: err,
+        error: err as Error,
       });
     } else {
       logger.info("Server closed", {

@@ -5,6 +5,7 @@ import { OAuthService } from "../services";
 import { oauthProviderFactory } from "../providers";
 import { RouteHandler, createRoute, z } from "@hono/zod-openapi";
 import { SessionProvider } from "@repo/db";
+import { env } from "@/env";
 
 export const getOauthCallbackRoute = createRoute({
   method: "get",
@@ -174,7 +175,7 @@ export const getOauthCallbackHandler: RouteHandler<GetOauthCallbackRoute> = asyn
 
   // Validate the state token to prevent CSRF attacks
   try {
-    const decodedState = verifyJwt(state, {
+    const decodedState = verifyJwt(state, env.JWT_SECRET, {
       algorithms: ["HS256"],
     }) as { state: string };
 
@@ -238,6 +239,7 @@ export const getOauthCallbackHandler: RouteHandler<GetOauthCallbackRoute> = asyn
         userId: user.id,
         sessionId: session.id,
       },
+      env.JWT_SECRET,
       {
         expiresIn: "1h",
       },
@@ -248,6 +250,7 @@ export const getOauthCallbackHandler: RouteHandler<GetOauthCallbackRoute> = asyn
         userId: user.id,
         sessionId: session.id,
       },
+      env.JWT_SECRET,
       {
         expiresIn: "90d",
       },
@@ -260,7 +263,7 @@ export const getOauthCallbackHandler: RouteHandler<GetOauthCallbackRoute> = asyn
         refreshToken: serverRefreshToken,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
     if (err instanceof HTTPException) {
       throw err;
     }

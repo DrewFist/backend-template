@@ -1,4 +1,4 @@
-import { env } from "@repo/config";
+import { env } from "@/env";
 import { type OAuthProvider, type OAuthTokenResponse, type OAuthUserInfo } from "./base.provider";
 import { logger } from "@repo/shared";
 

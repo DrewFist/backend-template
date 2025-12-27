@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: "backend-api-monitor"
+
+scrape_configs:
+  - job_name: "api-server"
+    metrics_path: "/metrics"
+    static_configs:
+      # Development: host.docker.internal:8000
+      # Production: Set API_METRICS_URL env var to your API service URL
+      - targets: ["API_METRICS_TARGET_PLACEHOLDER"]
+        labels:
+          service: "api"
+          environment: "ENVIRONMENT_PLACEHOLDER"

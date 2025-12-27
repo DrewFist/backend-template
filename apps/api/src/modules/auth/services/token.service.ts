@@ -3,6 +3,7 @@ import { oauthProviderFactory } from "../providers";
 import { encrypt, decrypt } from "@repo/shared";
 import { logger } from "@repo/shared";
 import { eq } from "drizzle-orm";
+import { env } from "@/env";
 
 export interface TokenRefreshResult {
   accessToken: string;
@@ -60,6 +61,7 @@ export namespace TokenService {
         session.providerAccessToken,
         session.providerAccessTokenIv,
         session.providerAccessTokenTag,
+        env.ENCRYPTION_KEY,
       );
     }
 
@@ -123,6 +125,7 @@ export namespace TokenService {
         session.providerRefreshToken,
         session.providerRefreshTokenIv,
         session.providerRefreshTokenTag,
+        env.ENCRYPTION_KEY,
       );
 
       // Get OAuth provider
@@ -140,7 +143,7 @@ export namespace TokenService {
         data: encryptedAccessToken,
         iv: accessTokenIv,
         tag: accessTokenTag,
-      } = encrypt(tokenResponse.access_token);
+      } = encrypt(tokenResponse.access_token, env.ENCRYPTION_KEY);
 
       // Calculate new expiration
       const accessTokenExpiresIn = tokenResponse.expires_in || 3600; // Default 1 hour
@@ -167,7 +170,7 @@ export namespace TokenService {
                 data: encryptedRefreshToken,
                 iv: refreshTokenIv,
                 tag: refreshTokenTag,
-              } = encrypt(tokenResponse.refresh_token);
+              } = encrypt(tokenResponse.refresh_token, env.ENCRYPTION_KEY);
 
               const refreshTokenExpiresAt = new Date(
                 Date.now() + (tokenResponse.expires_in || 90 * 24 * 60 * 60) * 1000,

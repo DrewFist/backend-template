@@ -6,6 +6,7 @@ A production-ready **Bun + Hono + TypeScript + PostgreSQL + Drizzle ORM** monore
 
 - **Monorepo Architecture**: Turborepo with Bun workspaces for managing multiple services
 - **Modern Stack**: Bun runtime, Hono web framework, TypeScript, PostgreSQL, Drizzle ORM
+- **Metrics & Monitoring**: Prometheus + Grafana with pre-configured dashboards
 - **OpenAPI Integration**: Type-safe API definitions with @hono/zod-openapi and Scalar documentation
 - **OAuth Authentication**: Extensible OAuth provider factory pattern (Google included)
 - **Rate Limiting**: Built-in rate limiting with hono-rate-limiter (global + route-specific)
@@ -21,14 +22,16 @@ A production-ready **Bun + Hono + TypeScript + PostgreSQL + Drizzle ORM** monore
 
 ```
 ├── apps/
-│   └── api/                    # Main API service
-│       ├── src/
-│       │   ├── api/v1/        # API route versioning
-│       │   ├── modules/       # Feature modules (auth, chat, etc.)
-│       │   └── index.ts       # App entry point
-│       ├── drizzle/           # Database migrations
-│       ├── drizzle.config.ts  # Drizzle ORM configuration
-│       └── docker-compose.dev.yml  # Local PostgreSQL
+│   ├── api/                    # Main API service
+│   │   ├── src/
+│   │   │   ├── modules/       # Feature modules (auth, etc.)
+│   │   │   └── index.ts       # App entry point
+│   │   └── drizzle.config.ts  # Drizzle ORM configuration
+│   │
+│   └── metrics/                # Metrics monitoring service
+│       ├── src/               # Metrics server (optional)
+│       ├── prometheus.yml     # Prometheus configuration
+│       └── grafana/           # Grafana dashboards & provisioning
 │
 ├── packages/
 │   ├── config/                # Environment variables & constants
@@ -43,7 +46,6 @@ A production-ready **Bun + Hono + TypeScript + PostgreSQL + Drizzle ORM** monore
 │   └── shared/                # Shared utilities
 │       ├── create-app.ts     # OpenAPI app factory with error handling
 │       ├── configure-openapi.ts  # Scalar documentation setup
-│       ├── factory.ts        # Hono handler factory (RouteHandler pattern)
 │       ├── logger.ts         # Winston logger
 │       ├── jwt.ts            # JWT utilities
 │       ├── encryption.ts     # AES encryption
@@ -51,9 +53,18 @@ A production-ready **Bun + Hono + TypeScript + PostgreSQL + Drizzle ORM** monore
 │       ├── error-schemas.ts  # OpenAPI error response schemas
 │       ├── rate-limiter.ts   # Rate limiting configurations
 │       ├── helpers.ts        # Common helpers
-│       └── middlewares/
-│           └── custom-z-validator.ts  # Zod validation wrapper
+│       ├── metrics/          # Prometheus metrics
+│       │   ├── registry.ts   # Central metrics registry
+│       │   ├── http.metrics.ts    # HTTP/API metrics
+│       │   └── db.metrics.ts      # Database metrics
+│       └── middleware/
+│           ├── custom-z-validator.ts  # Zod validation wrapper
+│           ├── metrics.middleware.ts  # Metrics collection
+│           └── request-logger.middleware.ts  # Request logging
 │
+├── docs/
+│   └── MONITORING.md          # Complete monitoring guide
+├── docker-compose.dev.yml     # PostgreSQL + Prometheus + Grafana
 ├── turbo.json                 # Turborepo configuration
 └── package.json               # Workspace root
 ```
@@ -95,7 +106,7 @@ cp .env.example .env  # If you have an example file, or create manually
 
 Required environment variables:
 
-```env
+````env
 # Database
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/your-db-name
 
@@ -109,13 +120,18 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:3000/v1/auth/oauth/google/callback
 
 # Security
-JWT_SECRET=your-jwt-secret-min-32-chars
-ENCRYPTION_KEY=your-64-char-hex-encryption-key  # Generate with: openssl rand -hex 32
+JWT_SECRET=your-jwtServices (Database + Monitoring)
 
-# CORS
-CORS_ORIGIN=http://localhost:3000  # Comma-separated origins or * for all
-FRONTEND_URL=http://localhost:3000
-```
+```bash
+# From project root
+docker compose -f docker-compose.dev.yml up -d
+````
+
+This starts:
+
+- **PostgreSQL** on `localhost:5432` with database `backend-template`
+- **Prometheus** on `localhost:9090` for metrics collection
+- **Grafana** on `localhost:3001` for metrics visualization (admin/admin)
 
 ### 4. Start Local Database
 
@@ -134,10 +150,16 @@ bun run db:generate  # Generate migrations from schema
 bun run db:migrate   # Apply migrations to database
 ```
 
-### 6. Start Development Server
+### 6. Start Development
 
 ```bash
+# Start all services (Docker + API + Metrics)
 bun run dev
+
+# Or start services individually:
+bun run dev:services  # Start Docker services only
+bun run dev:api       # Start API server only
+bun run dev:metrics   # Start metrics server only
 ```
 
 The API will be available at `http://localhost:3000`
@@ -392,23 +414,28 @@ bun run db:migrate
 bun run db:drop
 ```
 
-## 🏗️ Build Commands
+## 🏗️ Common Commands
 
 ```bash
-# Build all apps and packages
-bun run build
+# Development
+bun run dev              # Start Docker services + all apps
+bun run dev:services     # Start Docker services only (PostgreSQL + Prometheus + Grafana)
+bun run dev:api          # Start API server only
+bun run dev:metrics      # Start metrics server only
 
-# Run development mode (all services)
-bun run dev
+# Docker Services
+bun run stop             # Stop all Docker services
+bun run logs             # View Docker service logs
 
-# Run development mode (specific service)
-bun run dev --filter=@repo/api
+# Database
+bun run db:generate      # Generate migrations from schema
+bun run db:migrate       # Apply migrations to database
 
-# Type check all packages
-bun run type-check
-
-# Clean all build artifacts
-bun run clean
+# Build & Quality
+bun run build            # Build all apps and packages
+bun run type-check       # Type check all packages
+bun run lint             # Lint all packages
+bun run clean            # Clean all build artifacts
 ```
 
 ## 🔐 Security Best Practices
@@ -520,6 +547,65 @@ logger.audit("Sensitive action", {
 });
 ```
 
+## 📊 Monitoring & Metrics
+
+The template includes a complete monitoring stack with Prometheus and Grafana.
+
+### Quick Start
+
+```bash
+# Start everything (Docker services + API + Metrics)
+bun run dev
+
+# Or start services separately:
+bun run dev:services  # Docker only
+bun run dev:api       # API only
+bun run dev:metrics   # Metrics server only
+```
+
+### Access Dashboards
+
+- **API Server**: http://localhost:3000
+- **API Metrics**: http://localhost:3000/metrics (Prometheus format)
+- **Prometheus**: http://localhost:9090
+- **Grafana**: http://localhost:3001 (admin/admin)
+- **Metrics Server**: http://localhost:3002 (optional)
+
+### Available Metrics
+
+- **HTTP Metrics**: Request rate, latency, error rate by route/method/status
+- **Database Metrics**: Query performance, connection pool usage
+- **OAuth Metrics**: OAuth requests/success/failures by provider
+
+### Pre-configured Dashboards
+
+The template includes a Grafana dashboard with 11 panels:
+
+- Total Requests, Error Rate, P95 Response Time
+- Request Rate by Method & Status Code
+- Response Time Percentiles (P50/P95/P99)
+- Database Query Performance
+- OAuth Analytics
+
+### Adding Custom Metrics
+
+```typescript
+import { Counter } from "prom-client";
+import { metricsRegistry } from "@repo/shared/metrics";
+
+export const myCounter = new Counter({
+  name: "my_operations_total",
+  help: "Total operations",
+  labelNames: ["type", "status"],
+  registers: [metricsRegistry],
+});
+
+// In your code
+myCounter.inc({ type: "batch", status: "success" });
+```
+
+📖 **Full Documentation**: See [docs/MONITORING.md](docs/MONITORING.md) for detailed setup, PromQL queries, troubleshooting, and best practices.
+
 ## 🤝 Contributing
 
 This is a template - customize it for your needs! Common modifications:
@@ -564,9 +650,21 @@ lsof -ti:3000 | xargs kill -9
 # Check if PostgreSQL is running
 docker ps
 
-# Restart database
-cd apps/api
+# Restart services
 docker compose -f docker-compose.dev.yml restart
+```
+
+### Monitoring services not accessible
+
+```bash
+# Check all Docker services are running
+docker compose -f docker-compose.dev.yml ps
+
+# View logs
+bun run logs
+
+# Restart monitoring stack
+docker compose -f docker-compose.dev.yml restart prometheus grafana
 ```
 
 ### Module not found errors

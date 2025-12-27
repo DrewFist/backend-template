@@ -1,6 +1,7 @@
 import { type NewUser, type UpdateUser, usersTable } from "../schema";
 import { eq } from "drizzle-orm";
 import { type DBTransaction, db } from "../connection";
+import { withMetrics } from "../utils/metrics-wrapper";
 
 export namespace UsersService {
   /**
@@ -22,7 +23,10 @@ export namespace UsersService {
     const queryClient = options?.tx || db;
 
     try {
-      const [createdUser] = await queryClient.insert(usersTable).values(payload).returning();
+      const result = await withMetrics("insert", "users", async () =>
+        queryClient.insert(usersTable).values(payload).returning(),
+      );
+      const [createdUser] = result;
 
       logger?.audit("new user created", {
         module: "users",
@@ -63,12 +67,14 @@ export namespace UsersService {
   ) {
     const queryClient = options?.tx || db;
     try {
-      return await queryClient.query.usersTable.findFirst({
-        where: (table, { eq, and, isNull }) =>
-          options?.includeDeleted
-            ? eq(table.email, email)
-            : and(eq(table.email, email), isNull(table.deletedAt)),
-      });
+      return await withMetrics("select", "users", async () =>
+        queryClient.query.usersTable.findFirst({
+          where: (table, { eq, and, isNull }) =>
+            options?.includeDeleted
+              ? eq(table.email, email)
+              : and(eq(table.email, email), isNull(table.deletedAt)),
+        }),
+      );
     } catch (err) {
       logger?.error("error finding user by email", {
         module: "users",
@@ -101,12 +107,14 @@ export namespace UsersService {
   ) {
     const queryClient = options?.tx || db;
     try {
-      return await queryClient.query.usersTable.findFirst({
-        where: (table, { eq, and, isNull }) =>
-          options?.includeDeleted
-            ? eq(table.providerAccountId, providerAccountId)
-            : and(eq(table.providerAccountId, providerAccountId), isNull(table.deletedAt)),
-      });
+      return await withMetrics("select", "users", async () =>
+        queryClient.query.usersTable.findFirst({
+          where: (table, { eq, and, isNull }) =>
+            options?.includeDeleted
+              ? eq(table.providerAccountId, providerAccountId)
+              : and(eq(table.providerAccountId, providerAccountId), isNull(table.deletedAt)),
+        }),
+      );
     } catch (err) {
       logger?.error("error finding user by provider account id", {
         module: "users",
@@ -218,14 +226,17 @@ export namespace UsersService {
   ) {
     const queryClient = options?.tx || db;
     try {
-      const [updatedUser] = await queryClient
-        .update(usersTable)
-        .set({
-          ...payload,
-          updatedAt: new Date(),
-        })
-        .where(eq(usersTable.id, id))
-        .returning();
+      const result = await withMetrics("update", "users", async () =>
+        queryClient
+          .update(usersTable)
+          .set({
+            ...payload,
+            updatedAt: new Date(),
+          })
+          .where(eq(usersTable.id, id))
+          .returning(),
+      );
+      const [updatedUser] = result;
 
       logger?.audit("user updated by id", {
         module: "users",

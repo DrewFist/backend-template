@@ -8,3 +8,6 @@ export * from "./create-app";
 export * from "./error-schemas";
 export { errorHandler, notFoundHandler } from "./error-handler";
 export * from "./rate-limiter";
+export * from "./metrics";
+export { requestLogger } from "./middleware/request-logger.middleware";
+export { metricsMiddleware } from "./middleware/metrics.middleware";

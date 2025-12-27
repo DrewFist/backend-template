@@ -9,6 +9,8 @@ import {
 import { encrypt } from "@repo/shared";
 import { oauthProviderFactory, type OAuthProvider } from "../providers";
 import { logger } from "@repo/shared";
+import { oauthEventsCounter } from "../auth.metrics";
+import { env } from "@/env";
 
 export interface OAuthCallbackResult {
   user: Awaited<ReturnType<typeof UsersService.create>>;
@@ -59,13 +61,13 @@ async function executeOAuthCallbackTransaction(
     data: encryptedAccessToken,
     iv: accessTokenIv,
     tag: accessTokenTag,
-  } = encrypt(tokenResponse.access_token);
+  } = encrypt(tokenResponse.access_token, env.ENCRYPTION_KEY);
 
   const {
     data: encryptedRefreshToken,
     iv: refreshTokenIv,
     tag: refreshTokenTag,
-  } = encrypt(tokenResponse.refresh_token);
+  } = encrypt(tokenResponse.refresh_token, env.ENCRYPTION_KEY);
 
   // Calculate token expirations
   const accessTokenExpiresIn = tokenResponse.expires_in || 3600; // Default 1 hour
@@ -161,20 +163,28 @@ export namespace OAuthService {
       }
 
       return await db.transaction(async (tx) => {
-        return await executeOAuthCallbackTransaction(
+        const result = await executeOAuthCallbackTransaction(
           provider,
           tokenResponseWithRefresh,
           userInfo,
           oauthProvider,
           tx,
         );
+
+        // Track successful OAuth login
+        oauthEventsCounter.inc({ provider, event_type: "login:success" });
+
+        return result;
       });
     } catch (err) {
+      // Track OAuth errors
+      oauthEventsCounter.inc({ provider, event_type: "login:error" });
+
       logger.error(`Error handling OAuth callback for provider ${provider}`, {
         module: "auth",
         action: "oauth:callback:error",
         provider,
-        error: err instanceof Error ? err.message : String(err),
+        error: err as Error,
       });
       throw err;
     }
