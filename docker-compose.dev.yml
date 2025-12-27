@@ -52,11 +52,26 @@ services:
       - backend-network
     depends_on:
       - prometheus
+      - loki
+
+  loki:
+    image: grafana/loki:latest
+    container_name: backend-template-loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./infra/monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    networks:
+      - backend-network
 
 volumes:
   postgres-data:
   prometheus-data:
   grafana-data:
+  loki-data:
 
 networks:
   backend-network:

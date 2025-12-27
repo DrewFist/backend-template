@@ -10,6 +10,7 @@ export const baseEnvSchema = z.object({
     .enum(["fatal", "error", "warn", "info", "debug", "trace"])
     .optional()
     .default("info"),
+  LOKI_HOST: z.string().optional().default("http://localhost:3100"),
 });
 
 export type BaseEnv = z.infer<typeof baseEnvSchema>;
@@ -21,4 +22,5 @@ export type BaseEnv = z.infer<typeof baseEnvSchema>;
 export const baseEnv = baseEnvSchema.parse({
   NODE_ENV: process.env.NODE_ENV,
   LOG_LEVEL: process.env.LOG_LEVEL,
+  LOKI_HOST: process.env.LOKI_HOST,
 });

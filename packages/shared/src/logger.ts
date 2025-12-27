@@ -1,4 +1,5 @@
 import pino from "pino";
+import type { TransportTargetOptions } from "pino";
 import { baseEnv } from "@repo/config";
 
 type LoggerModules = "db" | "auth" | "users" | "system" | "session" | "security" | "http";
@@ -11,27 +12,64 @@ interface LoggerMeta {
 
 const isDevelopment = baseEnv.NODE_ENV === "development";
 
+// Build transport targets
+function buildTransports(): TransportTargetOptions[] {
+  const targets: TransportTargetOptions[] = [];
+
+  // Pretty print in development
+  if (isDevelopment) {
+    targets.push({
+      target: "pino-pretty",
+      level: baseEnv.LOG_LEVEL,
+      options: {
+        colorize: true,
+        translateTime: "HH:MM:ss Z",
+        ignore: "pid,hostname",
+        singleLine: false,
+        errorLikeObjectKeys: ["err", "error"],
+      },
+    });
+  } else {
+    // JSON output to stdout in production
+    targets.push({
+      target: "pino/file",
+      level: baseEnv.LOG_LEVEL,
+      options: { destination: 1 }, // stdout
+    });
+  }
+
+  // Always ship to Loki if host is configured
+  if (baseEnv.LOKI_HOST) {
+    targets.push({
+      target: "pino-loki",
+      level: baseEnv.LOG_LEVEL,
+      options: {
+        batching: true,
+        interval: 5, // Send logs every 5 seconds
+        host: baseEnv.LOKI_HOST,
+        // Extract these fields as Loki labels for filtering
+        labels: {
+          application: "api",
+          environment: baseEnv.NODE_ENV,
+        },
+        // Convert pino level number to string label
+        propsToLabels: ["level", "module"],
+        // Replace pino timestamp with Loki timestamp
+        replaceTimestamp: true,
+      },
+    });
+  }
+
+  return targets;
+}
+
 // Create base pino instance with proper error serialization
 const pinoInstance = pino({
   level: baseEnv.LOG_LEVEL,
-  // Use pretty printing in development, JSON in production
-  transport: isDevelopment
-    ? {
-        target: "pino-pretty",
-        options: {
-          colorize: true,
-          translateTime: "HH:MM:ss Z",
-          ignore: "pid,hostname",
-          singleLine: false,
-          errorLikeObjectKeys: ["err", "error"],
-        },
-      }
-    : undefined,
-  formatters: {
-    level: (label) => {
-      return { level: label };
-    },
+  transport: {
+    targets: buildTransports(),
   },
+  // Note: Cannot use formatters.level with transport.targets - pino restriction
   serializers: {
     // Properly serialize errors with stack traces
     err: pino.stdSerializers.err,
