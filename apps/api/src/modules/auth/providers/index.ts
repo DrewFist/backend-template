@@ -1,11 +1,12 @@
 import { SessionProvider } from "@repo/db";
-import { type OAuthProvider } from "./base.provider";
+import { type OAuthProvider, type OAuthProviderFactory } from "@repo/shared";
 import { GoogleOAuthProvider } from "./google.provider";
 
 /**
  * Provider factory - creates OAuth provider instances
+ * Implements OAuthProviderFactory interface from @repo/shared
  */
-class OAuthProviderFactory {
+class OAuthProviderFactoryImpl implements OAuthProviderFactory {
   private providers: Map<SessionProvider, () => OAuthProvider> = new Map();
 
   constructor() {
@@ -26,8 +27,8 @@ class OAuthProviderFactory {
   /**
    * Get an OAuth provider instance by provider name
    */
-  getProvider(provider: SessionProvider): OAuthProvider {
-    const factory = this.providers.get(provider);
+  getProvider(provider: string): OAuthProvider {
+    const factory = this.providers.get(provider as SessionProvider);
 
     if (!factory) {
       throw new Error(`OAuth provider "${provider}" is not registered`);
@@ -52,8 +53,13 @@ class OAuthProviderFactory {
 }
 
 // Export singleton instance
-export const oauthProviderFactory = new OAuthProviderFactory();
+export const oauthProviderFactory: OAuthProviderFactory = new OAuthProviderFactoryImpl();
 
-// Export types
-export type { OAuthProvider, OAuthTokenResponse, OAuthUserInfo } from "./base.provider";
+// Export types from shared
+export type {
+  OAuthProvider,
+  OAuthTokenResponse,
+  OAuthUserInfo,
+  OAuthProviderFactory,
+} from "@repo/shared";
 export { GoogleOAuthProvider } from "./google.provider";

@@ -1,4 +1,2 @@
-export { OAuthService } from "./oauth.service";
-export { TokenService } from "./token.service";
-export type { OAuthCallbackResult } from "./oauth.service";
-export type { TokenRefreshResult } from "./token.service";
+export { OAuthService, type OAuthCallbackResult } from "./oauth.service";
+export { TokenService, type TokenRefreshResult } from "./token.service";

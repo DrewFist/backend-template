@@ -1,14 +1,23 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { Scalar } from "@scalar/hono-api-reference";
 import { logger } from "./logger";
+import { Env } from "hono";
 
-export function configureOpenAPI(
-  app: OpenAPIHono,
+export function configureOpenAPI<E extends Env = Env>(
+  app: OpenAPIHono<E>,
   config: {
     title: string;
     version: string;
   },
 ) {
+  // Register Bearer Auth security scheme
+  app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
+    type: "http",
+    scheme: "bearer",
+    bearerFormat: "JWT",
+    description: "Enter your JWT access token",
+  });
+
   app.doc("/docs-json", {
     openapi: "3.0.0",
     info: {
@@ -22,6 +31,9 @@ export function configureOpenAPI(
     Scalar(() => {
       return {
         url: "/docs-json",
+        authentication: {
+          preferredSecurityScheme: "bearerAuth",
+        },
       };
     }),
   );

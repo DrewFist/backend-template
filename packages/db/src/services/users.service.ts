@@ -2,17 +2,16 @@ import { type NewUser, type UpdateUser, usersTable } from "../schema";
 import { eq } from "drizzle-orm";
 import { type DBTransaction, db } from "../connection";
 import { withMetrics } from "../utils/metrics-wrapper";
+import { logger } from "@repo/shared";
 
 export namespace UsersService {
   /**
    * Creates a new user in the database
    * @param payload - The new user's data
-   * @param logger - Optional logger instance for logging
    * @param options - extra options for a query
    */
   export async function create(
     payload: NewUser,
-    logger?: { audit: (msg: string, meta: any) => void; error: (msg: string, meta: any) => void },
     options?: {
       /**
        * database transaction object
@@ -28,14 +27,14 @@ export namespace UsersService {
       );
       const [createdUser] = result;
 
-      logger?.audit("new user created", {
+      logger.audit("new user created", {
         module: "users",
         action: "service:create",
       });
 
       return createdUser;
     } catch (err) {
-      logger?.error("error creating user", {
+      logger.error("error creating user", {
         module: "users",
         action: "service:create",
         error: err,
@@ -46,14 +45,44 @@ export namespace UsersService {
   }
 
   /**
+   * Find a user by id
+   * @param id id of the user
+   * @param options extra options for the query
+   */
+  export async function findById(
+    id: string,
+    options?: {
+      /**
+       * database transaction object
+       */
+      tx?: DBTransaction;
+    },
+  ) {
+    try {
+      const queryClient = options?.tx || db;
+
+      return await withMetrics("select", "users", async () =>
+        queryClient.query.usersTable.findFirst({
+          where: eq(usersTable.id, id),
+        }),
+      );
+    } catch (err) {
+      logger.error("Error finding user by id", {
+        module: "users",
+        action: "service:findById",
+        error: err,
+      });
+      throw err;
+    }
+  }
+
+  /**
    * Find a user by email (excluding soft-deleted users)
    * @param email - The user's email
-   * @param logger - Optional logger instance for logging
    * @param options extra options for a query
    */
   export async function findByEmail(
     email: string,
-    logger?: { error: (msg: string, meta: any) => void },
     options?: {
       /**
        * database transaction object
@@ -76,7 +105,7 @@ export namespace UsersService {
         }),
       );
     } catch (err) {
-      logger?.error("error finding user by email", {
+      logger.error("error finding user by email", {
         module: "users",
         action: "service:findByEmail",
         error: err,
@@ -88,12 +117,10 @@ export namespace UsersService {
   /**
    * Find a user by provider account ID (excluding soft-deleted users)
    * @param providerAccountId - The provider account ID
-   * @param logger - Optional logger instance for logging
    * @param options extra options for a query
    */
   export async function findByProviderAccountId(
     providerAccountId: string,
-    logger?: { error: (msg: string, meta: any) => void },
     options?: {
       /**
        * database transaction object
@@ -116,7 +143,7 @@ export namespace UsersService {
         }),
       );
     } catch (err) {
-      logger?.error("error finding user by provider account id", {
+      logger.error("error finding user by provider account id", {
         module: "users",
         action: "service:findByProviderAccountId",
         error: err,
@@ -128,12 +155,10 @@ export namespace UsersService {
   /**
    * Creates or updates a user (upsert pattern to prevent race conditions)
    * @param payload - The user's data
-   * @param logger - Optional logger instance for logging
    * @param options extra options for a query
    */
   export async function upsertByProviderAccountId(
     payload: NewUser,
-    logger?: { audit: (msg: string, meta: any) => void; error: (msg: string, meta: any) => void },
     options?: {
       /**
        * database transaction object
@@ -149,7 +174,7 @@ export namespace UsersService {
     const queryClient = options.tx;
     try {
       // Try to find existing user by provider account ID first
-      let user = await findByProviderAccountId(payload.providerAccountId, logger, {
+      let user = await findByProviderAccountId(payload.providerAccountId, {
         tx: queryClient,
         includeDeleted: false,
       });
@@ -165,12 +190,11 @@ export namespace UsersService {
             avatar: payload.avatar,
             providerAccountId: payload.providerAccountId,
           },
-          logger,
           { tx: queryClient },
         );
       } else {
         // Try to find by email to handle provider account ID changes
-        const userByEmail = await findByEmail(payload.email, logger, {
+        const userByEmail = await findByEmail(payload.email, {
           tx: queryClient,
           includeDeleted: false,
         });
@@ -186,18 +210,17 @@ export namespace UsersService {
               avatar: payload.avatar,
               providerAccountId: payload.providerAccountId,
             },
-            logger,
             { tx: queryClient },
           );
         } else {
           // Create new user
-          user = await create(payload, logger, { tx: queryClient });
+          user = await create(payload, { tx: queryClient });
         }
       }
 
       return user;
     } catch (err) {
-      logger?.error("error upserting user by provider account id", {
+      logger.error("error upserting user by provider account id", {
         module: "users",
         action: "service:upsertByProviderAccountId",
         error: err,
@@ -210,13 +233,11 @@ export namespace UsersService {
    * Update a user by id
    * @param id id of the user to update
    * @param payload new details to update
-   * @param logger - Optional logger instance for logging
    * @param options extra options for a query
    */
   export async function updateById(
     id: string,
     payload: UpdateUser,
-    logger?: { audit: (msg: string, meta: any) => void; error: (msg: string, meta: any) => void },
     options?: {
       /**
        * database transaction object
@@ -238,14 +259,14 @@ export namespace UsersService {
       );
       const [updatedUser] = result;
 
-      logger?.audit("user updated by id", {
+      logger.audit("user updated by id", {
         module: "users",
         action: "service:updateById",
       });
 
       return updatedUser;
     } catch (err) {
-      logger?.error("error updating user by id", {
+      logger.error("error updating user by id", {
         module: "users",
         action: "service:updateById",
         error: err,

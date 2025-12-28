@@ -35,18 +35,14 @@ await connectDB();
 
 ```typescript
 import { UsersService, SessionService } from "@repo/db";
-import { logger } from "@repo/shared";
 
 // Create user
-const user = await UsersService.create(
-  {
-    email: "user@example.com",
-    firstName: "John",
-    lastName: "Doe",
-    providerAccountId: "google-123",
-  },
-  logger,
-);
+const user = await UsersService.create({
+  email: "user@example.com",
+  firstName: "John",
+  lastName: "Doe",
+  providerAccountId: "google-123",
+});
 
 // Find by email
 const existingUser = await UsersService.findByEmail("user@example.com");
@@ -273,12 +269,10 @@ import { db } from "@repo/db";
 async function createUserWithSession(userData: NewUser, sessionData: NewSession) {
   return db.transaction(async (tx) => {
     // Create user
-    const user = await UsersService.create(userData, logger, { tx });
+    const user = await UsersService.create(userData, { tx });
 
     // Create session
-    const session = await SessionService.create({ ...sessionData, userId: user.id }, logger, {
-      tx,
-    });
+    const session = await SessionService.create({ ...sessionData, userId: user.id }, { tx });
 
     // If any operation fails, entire transaction rolls back
     return { user, session };

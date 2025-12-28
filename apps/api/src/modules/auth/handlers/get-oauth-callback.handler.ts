@@ -3,9 +3,10 @@ import { HTTPException } from "hono/http-exception";
 import { StatusCodes } from "@repo/config";
 import { OAuthService } from "../services";
 import { oauthProviderFactory } from "../providers";
-import { RouteHandler, createRoute, z } from "@hono/zod-openapi";
+import { createRoute, z } from "@hono/zod-openapi";
 import { SessionProvider } from "@repo/db";
 import { env } from "@/env";
+import { AppRouteHandler } from "@/types";
 
 export const getOauthCallbackRoute = createRoute({
   method: "get",
@@ -107,7 +108,7 @@ export const getOauthCallbackRoute = createRoute({
 
 export type GetOauthCallbackRoute = typeof getOauthCallbackRoute;
 
-export const getOauthCallbackHandler: RouteHandler<GetOauthCallbackRoute> = async (c) => {
+export const getOauthCallbackHandler: AppRouteHandler<GetOauthCallbackRoute> = async (c) => {
   const { provider } = c.req.valid("param");
   const { code, error, error_description, state } = c.req.valid("query");
 

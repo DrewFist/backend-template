@@ -1,14 +1,13 @@
 import {
-  type SessionProvider,
-  SessionStatus,
-  UsersService,
   SessionService,
+  UsersService,
   db,
   type DBTransaction,
+  type SessionProvider,
+  SessionStatus,
 } from "@repo/db";
-import { encrypt } from "@repo/shared";
-import { oauthProviderFactory, type OAuthProvider } from "../providers";
-import { logger } from "@repo/shared";
+import { encrypt, logger, type OAuthProvider } from "@repo/shared";
+import { oauthProviderFactory } from "../providers";
 import { oauthEventsCounter } from "../auth.metrics";
 import { env } from "@/env";
 
@@ -52,7 +51,6 @@ async function executeOAuthCallbackTransaction(
       avatar: userInfo.picture || null,
       providerAccountId: userInfo.id,
     },
-    logger,
     { tx },
   );
 
@@ -96,7 +94,6 @@ async function executeOAuthCallbackTransaction(
       lastAccessedAt: new Date(),
       metadata: {},
     },
-    logger,
     { tx },
   );
 

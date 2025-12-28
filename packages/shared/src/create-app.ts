@@ -2,9 +2,10 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { requestId } from "hono/request-id";
 import { errorHandler, notFoundHandler } from "./error-handler";
 import { StatusCodes } from "@repo/config";
+import type { Env } from "hono";
 
-export function createRouter() {
-  return new OpenAPIHono({
+export function createRouter<E extends Env = Env>() {
+  return new OpenAPIHono<E>({
     strict: false,
     defaultHook: (result, c) => {
       if (!result.success) {
@@ -27,8 +28,8 @@ export function createRouter() {
   });
 }
 
-export function createApp() {
-  const app = createRouter();
+export function createApp<E extends Env = Env>() {
+  const app = createRouter<E>();
   app.use(requestId());
 
   // Global error handler

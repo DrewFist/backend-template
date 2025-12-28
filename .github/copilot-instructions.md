@@ -83,21 +83,19 @@ initializeDB({ connectionString: env.DATABASE_URL, ssl: false });
 await connectDB();
 ```
 
-**Service namespace pattern** with optional logger and transaction:
+**Service namespace pattern** with optional transaction:
 
 ```typescript
 // packages/db/src/services/users.service.ts
+import { logger } from "@repo/shared";
+
 export namespace UsersService {
-  export async function create(
-    payload: NewUser,
-    logger?: { audit: (msg: string, meta: any) => void; error: (msg: string, meta: any) => void },
-    options?: { tx?: DBTransaction },
-  ) {
+  export async function create(payload: NewUser, options?: { tx?: DBTransaction }) {
     const queryClient = options?.tx || db;
     const [user] = await withMetrics("insert", "users", async () =>
       queryClient.insert(usersTable).values(payload).returning(),
     );
-    logger?.audit("User created", { module: "users", action: "service:create" });
+    logger.audit("User created", { module: "users", action: "service:create" });
     return user;
   }
 }

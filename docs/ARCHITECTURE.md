@@ -272,10 +272,8 @@ import { db, type DBTransaction } from "@repo/db";
 
 async function createUserWithSession(payload: NewUser) {
   return db.transaction(async (tx) => {
-    const user = await UsersService.create(payload, logger, { tx });
-    const session = await SessionService.create({ userId: user.id, provider: "google" }, logger, {
-      tx,
-    });
+    const user = await UsersService.create(payload, { tx });
+    const session = await SessionService.create({ userId: user.id, provider: "google" }, { tx });
     return { user, session };
   });
 }

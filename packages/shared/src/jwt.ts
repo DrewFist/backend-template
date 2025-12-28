@@ -7,7 +7,7 @@ import * as jwt from "jsonwebtoken";
  * @param options options for the sign
  * @returns the signed token
  */
-export function signJwt(payload: jwt.JwtPayload, jwtSecret: string, options: jwt.SignOptions) {
+export function signJwt(payload: jwt.JwtPayload, jwtSecret: string, options?: jwt.SignOptions) {
   return jwt.sign(payload, jwtSecret, { ...options, algorithm: "HS256" });
 }
 
@@ -18,6 +18,10 @@ export function signJwt(payload: jwt.JwtPayload, jwtSecret: string, options: jwt
  * @param options options for the verify
  * @returns the decoded payload
  */
-export function verifyJwt(token: string, jwtSecret: string, options: jwt.VerifyOptions) {
-  return jwt.verify(token, jwtSecret, { ...options, algorithms: ["HS256"] });
+export function verifyJwt<T = jwt.JwtPayload>(
+  token: string,
+  jwtSecret: string,
+  options?: jwt.VerifyOptions,
+): T | null {
+  return jwt.verify(token, jwtSecret, { ...options, algorithms: ["HS256"] }) as T;
 }

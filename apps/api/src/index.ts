@@ -12,7 +12,11 @@ import {
 } from "@repo/shared";
 import { getMetrics, getMetricsContentType } from "@repo/shared/metrics";
 import { initializeDB, connectDB, closeDB } from "@repo/db";
-import authRoutes from "./modules/auth/auth.routes";
+import authRoutes from "@/modules/auth/auth.routes";
+import { getUserMiddleware } from "@/middlewares/get-user.middleware";
+import { AppBindings, AppRouteHandler } from "./types";
+import { createRoute, z } from "@hono/zod-openapi";
+import { StatusCodes } from "@repo/config";
 
 // Initialize database with config
 initializeDB({
@@ -20,7 +24,7 @@ initializeDB({
   ssl: env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
-const app = createApp();
+const app = createApp<AppBindings>();
 
 // CORS configuration
 const allowedOrigins =
@@ -46,11 +50,39 @@ app.use(metricsMiddleware());
 // Apply global rate limiter
 app.use(globalRateLimiter);
 
-app.get("/health", (c) => {
+app.use(getUserMiddleware);
+
+const getHealthRoute = createRoute({
+  method: "get",
+  path: "/health",
+  tags: ["System"],
+  summary: "Health check endpoint",
+  description: "Returns the health status of the server",
+  responses: {
+    200: {
+      description: "Server is healthy",
+      content: {
+        "application/json": {
+          schema: z.object({
+            message: z.string().openapi({
+              example: "Server is up and running!!",
+            }),
+          }),
+        },
+      },
+    },
+  },
+});
+
+type GetHealthRoute = typeof getHealthRoute;
+
+const healthHandler: AppRouteHandler<GetHealthRoute> = (c) => {
   return c.json({
     message: "Server is up and running!!",
   });
-});
+};
+
+app.openapi(getHealthRoute, healthHandler);
 
 // Prometheus metrics endpoint
 app.get("/metrics", async (c) => {

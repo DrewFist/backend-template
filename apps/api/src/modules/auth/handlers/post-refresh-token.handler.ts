@@ -2,7 +2,8 @@ import { logger, errorResponseSchemas } from "@repo/shared";
 import { HTTPException } from "hono/http-exception";
 import { StatusCodes } from "@repo/config";
 import { TokenService } from "../services";
-import { RouteHandler, createRoute, z } from "@hono/zod-openapi";
+import { createRoute, z } from "@hono/zod-openapi";
+import { AppRouteHandler } from "@/types";
 
 export const postRefreshTokenRoute = createRoute({
   method: "post",
@@ -65,7 +66,7 @@ export const postRefreshTokenRoute = createRoute({
 
 export type PostRefreshTokenRoute = typeof postRefreshTokenRoute;
 
-export const postRefreshTokenHandler: RouteHandler<PostRefreshTokenRoute> = async (c) => {
+export const postRefreshTokenHandler: AppRouteHandler<PostRefreshTokenRoute> = async (c) => {
   try {
     const { sessionId } = c.req.valid("json");
 

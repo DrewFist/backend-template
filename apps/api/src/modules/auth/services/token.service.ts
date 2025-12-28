@@ -1,8 +1,6 @@
-import { SessionService, SessionStatus, sessionsTable, db, type DBTransaction } from "@repo/db";
+import { SessionService, type DBTransaction, SessionStatus } from "@repo/db";
+import { encrypt, decrypt, logger } from "@repo/shared";
 import { oauthProviderFactory } from "../providers";
-import { encrypt, decrypt } from "@repo/shared";
-import { logger } from "@repo/shared";
-import { eq } from "drizzle-orm";
 import { env } from "@/env";
 
 export interface TokenRefreshResult {
@@ -44,7 +42,7 @@ export namespace TokenService {
    * @returns Valid access token
    */
   export async function getValidAccessToken(sessionId: string): Promise<string> {
-    const session = await SessionService.findById(sessionId, logger);
+    const session = await SessionService.findById(sessionId);
 
     if (!session) {
       throw new Error("Session not found");
@@ -89,7 +87,7 @@ export namespace TokenService {
       tx?: DBTransaction;
     },
   ): Promise<TokenRefreshResult> {
-    const session = await SessionService.findById(sessionId);
+    const session = await SessionService.findById(sessionId, options);
 
     if (!session) {
       throw new Error("Session not found");
@@ -102,13 +100,7 @@ export namespace TokenService {
     // Check if refresh token is expired
     if (isRefreshTokenExpired(session)) {
       // Mark session as expired
-      await db
-        .update(sessionsTable)
-        .set({
-          status: SessionStatus.EXPIRED,
-          updatedAt: new Date(),
-        })
-        .where(eq(sessionsTable.id, sessionId));
+      await SessionService.updateById(sessionId, { status: SessionStatus.EXPIRED }, options);
 
       logger.warn("Refresh token expired, session marked as expired", {
         module: "auth",
@@ -149,42 +141,37 @@ export namespace TokenService {
       const accessTokenExpiresIn = tokenResponse.expires_in || 3600; // Default 1 hour
       const accessTokenExpiresAt = new Date(Date.now() + accessTokenExpiresIn * 1000);
 
+      // Build update payload
+      const updatePayload: Parameters<typeof SessionService.updateById>[1] = {
+        providerAccessToken: encryptedAccessToken,
+        providerAccessTokenIv: accessTokenIv,
+        providerAccessTokenTag: accessTokenTag,
+        providerAccessTokenExpiresAt: accessTokenExpiresAt,
+        lastAccessedAt: new Date(),
+        // Update scope if provided
+        ...(tokenResponse.scope && { providerScope: tokenResponse.scope }),
+      };
+
+      // Update refresh token if provider returned a new one
+      if (tokenResponse.refresh_token) {
+        const {
+          data: encryptedRefreshToken,
+          iv: refreshTokenIv,
+          tag: refreshTokenTag,
+        } = encrypt(tokenResponse.refresh_token, env.ENCRYPTION_KEY);
+
+        const refreshTokenExpiresAt = new Date(
+          Date.now() + (tokenResponse.expires_in || 90 * 24 * 60 * 60) * 1000,
+        );
+
+        updatePayload.providerRefreshToken = encryptedRefreshToken;
+        updatePayload.providerRefreshTokenIv = refreshTokenIv;
+        updatePayload.providerRefreshTokenTag = refreshTokenTag;
+        updatePayload.providerRefreshTokenExpiresAt = refreshTokenExpiresAt;
+      }
+
       // Update session with new access token
-      const queryClient = options?.tx ?? db;
-
-      await queryClient
-        .update(sessionsTable)
-        .set({
-          providerAccessToken: encryptedAccessToken,
-          providerAccessTokenIv: accessTokenIv,
-          providerAccessTokenTag: accessTokenTag,
-          providerAccessTokenExpiresAt: accessTokenExpiresAt,
-          updatedAt: new Date(),
-          lastAccessedAt: new Date(),
-          // Update scope if provided
-          ...(tokenResponse.scope && { providerScope: tokenResponse.scope }),
-          // Update refresh token if provider returned a new one
-          ...(tokenResponse.refresh_token &&
-            (() => {
-              const {
-                data: encryptedRefreshToken,
-                iv: refreshTokenIv,
-                tag: refreshTokenTag,
-              } = encrypt(tokenResponse.refresh_token, env.ENCRYPTION_KEY);
-
-              const refreshTokenExpiresAt = new Date(
-                Date.now() + (tokenResponse.expires_in || 90 * 24 * 60 * 60) * 1000,
-              );
-
-              return {
-                providerRefreshToken: encryptedRefreshToken,
-                providerRefreshTokenIv: refreshTokenIv,
-                providerRefreshTokenTag: refreshTokenTag,
-                providerRefreshTokenExpiresAt: refreshTokenExpiresAt,
-              };
-            })()),
-        })
-        .where(eq(sessionsTable.id, sessionId));
+      await SessionService.updateById(sessionId, updatePayload, options);
 
       logger.audit("Access token refreshed successfully", {
         module: "auth",
@@ -209,14 +196,14 @@ export namespace TokenService {
       });
 
       // Mark session as revoked if refresh failed
-      await db
-        .update(sessionsTable)
-        .set({
+      await SessionService.updateById(
+        sessionId,
+        {
           status: SessionStatus.REVOKED,
           revokedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(sessionsTable.id, sessionId));
+        },
+        options,
+      );
 
       throw err;
     }

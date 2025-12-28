@@ -95,7 +95,7 @@ export namespace logger {
     pinoInstance.info(meta, message);
   }
 
-  export function error(message: string, meta: LoggerMeta & { error?: Error | string }) {
+  export function error(message: string, meta: LoggerMeta & { error?: Error | string | unknown }) {
     // Extract error object if present for proper serialization
     const { error: err, ...restMeta } = meta;
     if (err) {

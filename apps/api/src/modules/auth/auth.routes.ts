@@ -8,8 +8,9 @@ import {
   postRefreshTokenRoute,
   postRefreshTokenHandler,
 } from "./handlers/post-refresh-token.handler";
+import { AppBindings } from "../../types";
 
-const authRoutes = createRouter();
+const authRoutes = createRouter<AppBindings>();
 
 // Apply auth-specific rate limiting
 authRoutes.use(authRateLimiter);

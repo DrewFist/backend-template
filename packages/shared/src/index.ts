@@ -11,3 +11,4 @@ export * from "./rate-limiter";
 export * from "./metrics";
 export { requestLogger } from "./middleware/request-logger.middleware";
 export { metricsMiddleware } from "./middleware/metrics.middleware";
+export * from "./oauth";

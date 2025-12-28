@@ -18,7 +18,6 @@
     "@repo/db": "*",
     "@repo/shared": "*",
     "dotenv": "^17.2.3",
-    "drizzle-orm": "^0.44.7",
     "hono": "^4.10.3",
     "jsonwebtoken": "^9.0.2",
     "prom-client": "^15.1.3",
