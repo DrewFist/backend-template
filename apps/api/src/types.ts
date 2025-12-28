@@ -5,7 +5,10 @@ import { Session, User } from "@repo/db";
  * Application-wide Hono bindings that define context variables available in handlers.
  *
  * These bindings extend the default Hono context with typed variables that are
- * populated by middleware (e.g., authentication middleware sets `user` and `session`).
+ * populated by the `getUserMiddleware` (see `@/middlewares/get-user.middleware.ts`).
+ *
+ * The middleware extracts the JWT from the `Authorization: Bearer <token>` header,
+ * validates the session, and attaches the authenticated user and session to the context.
  *
  * @example
  * ```typescript
@@ -16,6 +19,8 @@ import { Session, User } from "@repo/db";
  *   return c.json({ userId: user.id });
  * };
  * ```
+ *
+ * @see {@link file://@/middlewares/get-user.middleware.ts getUserMiddleware} - Populates user & session from JWT
  */
 export interface AppBindings {
   Variables: {

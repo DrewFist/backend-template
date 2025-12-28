@@ -33,3 +33,68 @@ Copy `.env.example` from the root to `.env` and configure:
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`
 - `ENCRYPTION_KEY` (64-char hex string for AES-256)
 - `JWT_SECRET` (min 32 chars)
+
+## Handler Pattern
+
+Use `AppRouteHandler<R>` instead of `RouteHandler` from `@hono/zod-openapi` to get proper typing for app-specific context variables (`user`, `session`).
+
+### Creating a Handler
+
+```typescript
+// src/modules/{feature}/handlers/{action}.handler.ts
+import { createRoute, z } from "@hono/zod-openapi";
+import { StatusCodes } from "@repo/config";
+import { errorResponseSchemas } from "@repo/shared";
+import { AppRouteHandler } from "@/types";
+
+// 1. Define the route
+export const myRoute = createRoute({
+  method: "get",
+  path: "/v1/resource/{id}",
+  tags: ["Resource"],
+  summary: "Get resource by ID",
+  request: {
+    params: z.object({ id: z.string() }),
+  },
+  responses: {
+    [StatusCodes.HTTP_200_OK]: {
+      content: { "application/json": { schema: responseSchema } },
+      description: "Success",
+    },
+    ...errorResponseSchemas, // Always include for 400,401,403,404,429,500
+  },
+});
+
+// 2. Export the route type
+export type MyRoute = typeof myRoute;
+
+// 3. Create the handler with AppRouteHandler<RouteType>
+export const myHandler: AppRouteHandler<MyRoute> = async (c) => {
+  // Access validated path params (use "param" not "params")
+  const { id } = c.req.valid("param");
+
+  // Access query params if defined in route
+  const { page } = c.req.valid("query");
+
+  // Access request body if defined in route
+  const body = c.req.valid("json");
+
+  // Access authenticated user & session (see below)
+  const user = c.get("user");
+  const session = c.get("session");
+
+  return c.json({ data: result }, StatusCodes.HTTP_200_OK);
+};
+```
+
+### User & Session Context
+
+The `getUserMiddleware` (`src/middlewares/get-user.middleware.ts`) populates `user` and `session` in the context:
+
+1. Extracts JWT from `Authorization: Bearer <token>` header
+2. Verifies the token using `JWT_SECRET`
+3. Validates the session (checks if not revoked/expired)
+4. Fetches the user from database
+5. Attaches both to context via `c.set("user", user)` and `c.set("session", session)`
+
+**Note:** For unauthenticated routes, `user` and `session` will be `undefined`. For protected routes, apply the middleware and check for their presence.
