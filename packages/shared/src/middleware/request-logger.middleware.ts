@@ -8,6 +8,13 @@ import { randomUUID } from "crypto";
  */
 export const requestLogger = (): MiddlewareHandler => {
   return async (c, next) => {
+    const path = c.req.path;
+
+    // Skip logging for metrics endpoint to avoid flooding logs
+    if (path === "/metrics") {
+      return await next();
+    }
+
     const start = Date.now();
     const requestId = c.req.header("x-request-id") || randomUUID();
 
