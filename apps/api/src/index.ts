@@ -16,8 +16,6 @@ import authRoutes from "@/modules/auth/auth.routes";
 import { getUserMiddleware } from "@/middlewares/get-user.middleware";
 import { AppBindings, AppRouteHandler } from "./types";
 import { createRoute, z } from "@hono/zod-openapi";
-import { StatusCodes } from "@repo/config";
-import { compress } from "hono/compress";
 import { secureHeaders } from "hono/secure-headers";
 
 // Initialize database with config
@@ -43,7 +41,6 @@ app.use(
   }),
 );
 
-app.use(compress());
 app.use(secureHeaders());
 
 // Apply request logging middleware

@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
 import { logger } from "./logger";
 import { StatusCodes } from "@repo/config";
+import { httpErrorCounter } from "./metrics/http.metrics";
 
 export function errorHandler(err: Error, c: Context) {
   // Handle Zod validation errors
@@ -12,6 +13,14 @@ export function errorHandler(err: Error, c: Context) {
     err.issues.forEach((issue) => {
       const path = issue.path.join(".") || "unknown";
       errors[path] = issue.message;
+    });
+
+    // Track validation error in metrics
+    httpErrorCounter.inc({
+      method: c.req.method,
+      route: c.req.path,
+      status_code: StatusCodes.HTTP_400_BAD_REQUEST,
+      error_type: "validation_error",
     });
 
     return c.json(
@@ -53,6 +62,14 @@ export function errorHandler(err: Error, c: Context) {
     error: err.message,
     stack: err.stack,
     path: c.req.path,
+  });
+
+  // Track uncaught exception in metrics
+  httpErrorCounter.inc({
+    method: c.req.method,
+    route: c.req.path,
+    status_code: StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR,
+    error_type: "uncaught_exception",
   });
 
   return c.json(
