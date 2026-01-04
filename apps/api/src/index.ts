@@ -17,6 +17,7 @@ import { getUserMiddleware } from "@/middlewares/get-user.middleware";
 import { type AppBindings, type AppRouteHandler } from "./types";
 import { createRoute, z } from "@hono/zod-openapi";
 import { secureHeaders } from "hono/secure-headers";
+import { userRoutes } from "./modules/users/user.routes";
 
 // Initialize database with config
 initializeDB({
@@ -94,7 +95,7 @@ app.get("/metrics", async (c) => {
   });
 });
 
-const routes = [authRoutes] as const;
+const routes = [authRoutes, userRoutes] as const;
 
 routes.forEach((route) => {
   app.route("/", route);

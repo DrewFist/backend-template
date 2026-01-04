@@ -1,5 +1,5 @@
 export { usersSchema } from "./users";
-export { type NewUser, usersTable, type UpdateUser, type User } from "./users/users.db";
+export { type NewUser, usersTable, type UpdateUser, type User, UserRole } from "./users/users.db";
 export {
   type SessionMetadata,
   type Session,

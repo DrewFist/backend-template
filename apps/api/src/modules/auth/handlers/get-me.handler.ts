@@ -28,6 +28,10 @@ export const getMeRoute = createRoute({
                 firstName: z.string().openapi({ example: "Ayush" }),
                 lastName: z.string().nullable().openapi({ example: "Chugh" }),
                 role: z.enum(UserRole).openapi({ example: UserRole.USER }),
+                avatar: z
+                  .string()
+                  .nullable()
+                  .openapi({ example: "https://example.com/avatar.png" }),
               }),
             }),
           }),
@@ -52,6 +56,7 @@ export const getMeHandler: AppRouteHandler<GetMeRoute> = (c) => {
           firstName: user.firstName,
           lastName: user.lastName,
           role: user.role,
+          avatar: user.avatar,
         },
       },
     });

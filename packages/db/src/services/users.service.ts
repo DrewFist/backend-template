@@ -230,6 +230,42 @@ export namespace UsersService {
   }
 
   /**
+   * Get all users in the db
+   */
+  export async function findAll(options?: {
+    /**
+     * page number
+     */
+    page?: number;
+    /**
+     * number of users per page
+     */
+    limit?: number;
+
+    /**
+     * database transaction object
+     */
+    tx?: DBTransaction;
+  }) {
+    try {
+      return await withMetrics("select", "users", () => {
+        return db.query.usersTable.findMany({
+          limit: options?.limit,
+          offset: options?.page && options?.limit ? (options.page - 1) * options.limit : 0,
+        });
+      });
+    } catch (err) {
+      logger.error("error finding all users", {
+        module: "users",
+        action: "service:findAll",
+        error: err,
+      });
+
+      throw err;
+    }
+  }
+
+  /**
    * Update a user by id
    * @param id id of the user to update
    * @param payload new details to update

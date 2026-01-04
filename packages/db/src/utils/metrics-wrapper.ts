@@ -7,7 +7,7 @@ import { dbQueryDuration, dbErrorCounter } from "@repo/shared";
  * @param fn - The database operation function
  */
 export async function withMetrics<T>(
-  operation: string,
+  operation: "select" | "insert" | "update" | "delete" | "transaction",
   table: string,
   fn: () => Promise<T>,
 ): Promise<T> {
