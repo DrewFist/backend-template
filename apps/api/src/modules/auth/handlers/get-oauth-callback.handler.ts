@@ -7,6 +7,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { SessionProvider } from "@repo/db";
 import { env } from "@/env";
 import { AppRouteHandler } from "@/types";
+import { setCookie } from "hono/cookie";
 
 export const getOauthCallbackRoute = createRoute({
   method: "get",
@@ -17,7 +18,7 @@ export const getOauthCallbackRoute = createRoute({
   request: {
     params: z.object({
       provider: z
-        .nativeEnum(SessionProvider, {
+        .enum(SessionProvider, {
           message: "Invalid OAuth provider",
         })
         .openapi({
@@ -74,6 +75,19 @@ export const getOauthCallbackRoute = createRoute({
             name: "state",
           },
         }),
+      redirect: z
+        .string()
+        .optional()
+        .default("false")
+        .openapi({
+          description: "Whether to redirect to the frontend after successful authentication",
+          example: true,
+          enum: ["true", "false"],
+          param: {
+            in: "query",
+            name: "redirect",
+          },
+        }),
     }),
   },
   responses: {
@@ -99,6 +113,9 @@ export const getOauthCallbackRoute = createRoute({
         },
       },
     },
+    302: {
+      description: "Redirect to app after successful authentication",
+    },
     [StatusCodes.HTTP_400_BAD_REQUEST]: errorResponseSchemas[StatusCodes.HTTP_400_BAD_REQUEST],
     [StatusCodes.HTTP_401_UNAUTHORIZED]: errorResponseSchemas[StatusCodes.HTTP_401_UNAUTHORIZED],
     [StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR]:
@@ -110,7 +127,7 @@ export type GetOauthCallbackRoute = typeof getOauthCallbackRoute;
 
 export const getOauthCallbackHandler: AppRouteHandler<GetOauthCallbackRoute> = async (c) => {
   const { provider } = c.req.valid("param");
-  const { code, error, error_description, state } = c.req.valid("query");
+  const { code, error, error_description, state, redirect } = c.req.valid("query");
 
   // Check if provider is registered
   if (!oauthProviderFactory.hasProvider(provider)) {
@@ -257,13 +274,33 @@ export const getOauthCallbackHandler: AppRouteHandler<GetOauthCallbackRoute> = a
       },
     );
 
-    return c.json({
-      message: "Logged in successfully",
-      payload: {
-        accessToken: serverAccessToken,
-        refreshToken: serverRefreshToken,
-      },
-    });
+    if (redirect === "false") {
+      return c.json({
+        message: "Logged in successfully",
+        payload: {
+          accessToken: serverAccessToken,
+          refreshToken: serverRefreshToken,
+        },
+      });
+    } else {
+      setCookie(c, "refresh_token", serverRefreshToken, {
+        httpOnly: true,
+        secure: env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 90 * 24 * 60 * 60, // 90 days in seconds
+      });
+
+      setCookie(c, "access_token", serverAccessToken, {
+        httpOnly: false,
+        secure: env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60, // 1 hour in seconds
+      });
+
+      return c.redirect(env.FRONTEND_URL);
+    }
   } catch (err: any) {
     if (err instanceof HTTPException) {
       throw err;

@@ -4,13 +4,15 @@ import { MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { env } from "@/env";
 import { SessionService, UsersService } from "@repo/db";
+import { getCookie } from "hono/cookie";
 
 /**
  * Extract user from access token and attach to context
  */
 export const getUserMiddleware: MiddlewareHandler = async (c, next) => {
   try {
-    const accessToken = c.req.header("Authorization")?.replace("Bearer ", "");
+    const accessToken =
+      getCookie(c, "access_token") || c.req.header("Authorization")?.replace("Bearer ", "");
 
     if (accessToken) {
       // verify access token
