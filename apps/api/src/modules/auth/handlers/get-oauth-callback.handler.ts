@@ -6,7 +6,7 @@ import { oauthProviderFactory } from "../providers";
 import { createRoute, z } from "@hono/zod-openapi";
 import { SessionProvider } from "@repo/db";
 import { env } from "@/env";
-import { AppRouteHandler } from "@/types";
+import { type AppRouteHandler } from "@/types";
 import { setCookie } from "hono/cookie";
 
 export const getOauthCallbackRoute = createRoute({

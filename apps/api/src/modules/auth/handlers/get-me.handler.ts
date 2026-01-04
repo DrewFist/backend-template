@@ -1,7 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { StatusCodes } from "@repo/config";
 import { errorResponseSchemas, logger } from "@repo/shared";
-import { AppRouteHandler } from "../../../types";
+import { type AppRouteHandler } from "../../../types";
 import { enforceUserMiddleware } from "../../../middlewares/enforce-user.middleware";
 import { HTTPException } from "hono/http-exception";
 
@@ -38,7 +38,7 @@ export const getMeRoute = createRoute({
 
 export type GetMeRoute = typeof getMeRoute;
 
-export const getMeHandler: AppRouteHandler<GetMeRoute> = async (c) => {
+export const getMeHandler: AppRouteHandler<GetMeRoute> = (c) => {
   const user = c.var.user;
 
   try {

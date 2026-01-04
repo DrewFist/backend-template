@@ -35,29 +35,17 @@ export const getUserMiddleware: MiddlewareHandler<AppBindings> = async (c, next)
       // check if session is valid and it's not revoked or expired
       const session = await SessionService.findById(decodedToken.sessionId);
 
-      if (!session || session.revokedAt || session.expiresAt < new Date()) {
-        throw new HTTPException(StatusCodes.HTTP_401_UNAUTHORIZED, {
-          message: "Session is invalid or expired",
-          res: c.json(
-            { message: "Session is invalid or expired" },
-            StatusCodes.HTTP_401_UNAUTHORIZED,
-          ),
-        });
-      }
-
       // get user details from user id from session
       const user = await UsersService.findById(decodedToken.userId);
 
-      if (!user) {
-        throw new HTTPException(StatusCodes.HTTP_401_UNAUTHORIZED, {
-          message: "User not found",
-          res: c.json({ message: "User not found" }, StatusCodes.HTTP_401_UNAUTHORIZED),
-        });
+      // attach user to context
+      if (user) {
+        c.set("user", user);
       }
 
-      // attach user to context
-      c.set("user", user);
-      c.set("session", session);
+      if (session) {
+        c.set("session", session);
+      }
     }
 
     return next();

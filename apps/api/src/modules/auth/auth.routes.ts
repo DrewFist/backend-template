@@ -8,7 +8,7 @@ import {
   postRefreshTokenRoute,
   postRefreshTokenHandler,
 } from "./handlers/post-refresh-token.handler";
-import { AppBindings } from "../../types";
+import { type AppBindings } from "../../types";
 import { getMeHandler, getMeRoute } from "./handlers/get-me.handler";
 
 const authRoutes = createRouter<AppBindings>();
