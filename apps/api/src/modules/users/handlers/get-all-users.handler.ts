@@ -39,19 +39,29 @@ export const getAllUsersRoute = createRoute({
         "application/json": {
           schema: z.object({
             message: z.string().openapi({ example: "Users retrieved successfully" }),
-            payload: z.array(
-              z.object({
-                id: z.string().openapi({ example: "123e4567-e89b-12d3-a456-426614174000" }),
-                email: z.email().openapi({ example: "user@example.com" }),
-                firstName: z.string().openapi({ example: "John" }),
-                lastName: z.string().nullable().openapi({ example: "Doe" }),
-                role: z.enum(UserRole).openapi({ example: UserRole.USER }),
-                avatar: z
-                  .string()
-                  .nullable()
-                  .openapi({ example: "https://example.com/avatar.png" }),
+            payload: z.object({
+              users: z.array(
+                z.object({
+                  id: z.string().openapi({ example: "123e4567-e89b-12d3-a456-426614174000" }),
+                  email: z.email().openapi({ example: "user@example.com" }),
+                  firstName: z.string().openapi({ example: "John" }),
+                  lastName: z.string().nullable().openapi({ example: "Doe" }),
+                  role: z.enum(UserRole).openapi({ example: UserRole.USER }),
+                  avatar: z
+                    .string()
+                    .nullable()
+                    .openapi({ example: "https://example.com/avatar.png" }),
+                }),
+              ),
+              pagination: z.object({
+                page: z.number().openapi({ example: 1, description: "Page number" }),
+                limit: z.number().openapi({ example: 10, description: "Number of users per page" }),
+                total: z.number().openapi({ example: 100, description: "Total number of users" }),
+                totalPages: z
+                  .number()
+                  .openapi({ example: 10, description: "Total number of pages" }),
               }),
-            ),
+            }),
           }),
         },
       },
@@ -66,11 +76,19 @@ export const getAllUsersHandler: AppRouteHandler<GetAllUsersRoute> = async (c) =
   const { page, limit } = c.req.valid("query");
 
   try {
-    const users = await UsersService.findAll({ page, limit });
+    const { users, pagination } = await UsersService.findAll({ page, limit });
 
     return c.json({
       message: "Users retrieved successfully",
-      payload: users,
+      payload: {
+        users,
+        pagination: {
+          page,
+          limit,
+          total: pagination.total,
+          totalPages: pagination.totalPages,
+        },
+      },
     });
   } catch (err) {
     if (err instanceof HTTPException) {

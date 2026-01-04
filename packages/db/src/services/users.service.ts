@@ -1,5 +1,5 @@
 import { type NewUser, type UpdateUser, usersTable } from "../schema";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { type DBTransaction, db } from "../connection";
 import { withMetrics } from "../utils/metrics-wrapper";
 import { logger } from "@repo/shared";
@@ -248,12 +248,25 @@ export namespace UsersService {
     tx?: DBTransaction;
   }) {
     try {
-      return await withMetrics("select", "users", () => {
-        return db.query.usersTable.findMany({
+      const total = await withMetrics("select", "users", async () =>
+        db.select({ count: count() }).from(usersTable),
+      );
+      const [totalCount] = total;
+      const users = await withMetrics("select", "users", async () =>
+        db.query.usersTable.findMany({
           limit: options?.limit,
           offset: options?.page && options?.limit ? (options.page - 1) * options.limit : 0,
-        });
-      });
+        }),
+      );
+      return {
+        users,
+        pagination: {
+          page: options?.page,
+          limit: options?.limit,
+          total: totalCount.count,
+          totalPages: options?.limit ? Math.ceil(totalCount.count / options.limit) : 1,
+        },
+      };
     } catch (err) {
       logger.error("error finding all users", {
         module: "users",
