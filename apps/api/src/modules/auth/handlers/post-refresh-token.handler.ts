@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { StatusCodes } from "@repo/config";
 import { TokenService } from "../services";
 import { createRoute, z } from "@hono/zod-openapi";
-import { AppRouteHandler } from "@/types";
+import { type AppRouteHandler } from "@/types";
 
 export const postRefreshTokenRoute = createRoute({
   method: "post",
@@ -56,11 +56,7 @@ export const postRefreshTokenRoute = createRoute({
         },
       },
     },
-    [StatusCodes.HTTP_400_BAD_REQUEST]: errorResponseSchemas[StatusCodes.HTTP_400_BAD_REQUEST],
-    [StatusCodes.HTTP_401_UNAUTHORIZED]: errorResponseSchemas[StatusCodes.HTTP_401_UNAUTHORIZED],
-    [StatusCodes.HTTP_404_NOT_FOUND]: errorResponseSchemas[StatusCodes.HTTP_404_NOT_FOUND],
-    [StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR]:
-      errorResponseSchemas[StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR],
+    ...errorResponseSchemas,
   },
 });
 

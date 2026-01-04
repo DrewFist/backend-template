@@ -19,7 +19,12 @@
     "clean": "turbo clean && rm -rf node_modules"
   },
   "devDependencies": {
-    "turbo": "^2.7.0"
+    "turbo": "^2.7.0",
+    "eslint": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0"
   },
   "dependencies": {
     "@scalar/hono-api-reference": "^0.9.30",

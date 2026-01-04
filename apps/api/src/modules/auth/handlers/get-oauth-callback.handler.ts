@@ -75,19 +75,6 @@ export const getOauthCallbackRoute = createRoute({
             name: "state",
           },
         }),
-      redirect: z
-        .string()
-        .optional()
-        .default("true")
-        .openapi({
-          description: "Whether to redirect to the frontend after successful authentication",
-          example: true,
-          enum: ["true", "false"],
-          param: {
-            in: "query",
-            name: "redirect",
-          },
-        }),
     }),
   },
   responses: {
@@ -113,13 +100,10 @@ export const getOauthCallbackRoute = createRoute({
         },
       },
     },
-    302: {
+    [StatusCodes.HTTP_302_FOUND]: {
       description: "Redirect to app after successful authentication",
     },
-    [StatusCodes.HTTP_400_BAD_REQUEST]: errorResponseSchemas[StatusCodes.HTTP_400_BAD_REQUEST],
-    [StatusCodes.HTTP_401_UNAUTHORIZED]: errorResponseSchemas[StatusCodes.HTTP_401_UNAUTHORIZED],
-    [StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR]:
-      errorResponseSchemas[StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR],
+    ...errorResponseSchemas,
   },
 });
 
@@ -127,7 +111,7 @@ export type GetOauthCallbackRoute = typeof getOauthCallbackRoute;
 
 export const getOauthCallbackHandler: AppRouteHandler<GetOauthCallbackRoute> = async (c) => {
   const { provider } = c.req.valid("param");
-  const { code, error, error_description, state, redirect } = c.req.valid("query");
+  const { code, error, error_description, state } = c.req.valid("query");
 
   // Check if provider is registered
   if (!oauthProviderFactory.hasProvider(provider)) {
@@ -192,44 +176,22 @@ export const getOauthCallbackHandler: AppRouteHandler<GetOauthCallbackRoute> = a
   }
 
   // Validate the state token to prevent CSRF attacks
-  try {
-    const decodedState = verifyJwt(state, env.JWT_SECRET, {
-      algorithms: ["HS256"],
-    }) as { state: string };
 
-    if (!decodedState.state) {
-      logger.error("Invalid state token structure", {
-        module: "auth",
-        action: "oauth:callback:invalid_state_structure",
-        provider,
-      });
+  const decodedState = verifyJwt(state, env.JWT_SECRET, {
+    algorithms: ["HS256"],
+  }) as { state: string; redirect: "true" | "false" };
 
-      throw new HTTPException(StatusCodes.HTTP_400_BAD_REQUEST, {
-        message: "Invalid state parameter",
-        res: c.json({
-          message: "Invalid state parameter",
-        }),
-      });
-    }
-
-    // State token is valid - this confirms the request is legitimate and not a CSRF attack
-  } catch (err) {
-    if (err instanceof HTTPException) {
-      throw err;
-    }
-
-    // JWT verification failed (expired, invalid signature, etc.)
-    logger.error("State token validation failed", {
+  if (!decodedState.state) {
+    logger.error("Invalid state token structure", {
       module: "auth",
-      action: "oauth:callback:state_validation_failed",
+      action: "oauth:callback:invalid_state_structure",
       provider,
-      error: err instanceof Error ? err.message : String(err),
     });
 
     throw new HTTPException(StatusCodes.HTTP_400_BAD_REQUEST, {
-      message: "State token is invalid or expired. Please try again.",
+      message: "Invalid state parameter",
       res: c.json({
-        message: "State token is invalid or expired. Please try again.",
+        message: "Invalid state parameter",
       }),
     });
   }
@@ -274,7 +236,7 @@ export const getOauthCallbackHandler: AppRouteHandler<GetOauthCallbackRoute> = a
       },
     );
 
-    if (redirect === "false") {
+    if (decodedState.redirect === "false") {
       return c.json({
         message: "Logged in successfully",
         payload: {

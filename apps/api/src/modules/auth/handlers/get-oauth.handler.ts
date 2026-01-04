@@ -6,7 +6,7 @@ import { oauthProviderFactory } from "../providers";
 import { createRoute, z } from "@hono/zod-openapi";
 import { SessionProvider } from "@repo/db";
 import { env } from "@/env";
-import { AppRouteHandler } from "@/types";
+import { type AppRouteHandler } from "@/types";
 
 export const getOauthProviderRoute = createRoute({
   method: "get",
@@ -26,6 +26,22 @@ export const getOauthProviderRoute = createRoute({
           param: {
             in: "path",
             name: "provider",
+          },
+        }),
+    }),
+    query: z.object({
+      redirect: z
+        .string()
+        .optional()
+        .default("true")
+        .openapi({
+          description:
+            "Wether to redirect to frontend app after OAuth authorization URL is generated",
+          enum: ["true", "false"],
+          example: "false",
+          param: {
+            in: "query",
+            name: "redirect",
           },
         }),
     }),
@@ -49,9 +65,7 @@ export const getOauthProviderRoute = createRoute({
         },
       },
     },
-    [StatusCodes.HTTP_400_BAD_REQUEST]: errorResponseSchemas[StatusCodes.HTTP_400_BAD_REQUEST],
-    [StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR]:
-      errorResponseSchemas[StatusCodes.HTTP_500_INTERNAL_SERVER_ERROR],
+    ...errorResponseSchemas,
   },
 });
 
@@ -59,6 +73,7 @@ export type GetOauthProviderRoute = typeof getOauthProviderRoute;
 
 export const getOauthHandler: AppRouteHandler<GetOauthProviderRoute> = (c) => {
   const { provider } = c.req.valid("param");
+  const { redirect } = c.req.valid("query");
 
   // Check if provider is registered
   if (!oauthProviderFactory.hasProvider(provider)) {
@@ -75,7 +90,7 @@ export const getOauthHandler: AppRouteHandler<GetOauthProviderRoute> = (c) => {
   const stateToken = generateStateToken();
 
   // Sign the state token with JWT to enable server-side validation
-  const signedState = signJwt({ state: stateToken }, env.JWT_SECRET, {
+  const signedState = signJwt({ state: stateToken, redirect: redirect }, env.JWT_SECRET, {
     expiresIn: "10m", // State should expire after 10 minutes
   });
 
