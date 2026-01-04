@@ -16,12 +16,20 @@ export const getAllUsersRoute = createRoute({
   description: "Retrieves a list of all users in the system",
   request: {
     query: z.object({
-      page: z.number().optional().default(1).openapi({ example: 1, description: "Page number" }),
-      limit: z
+      page: z.coerce
+        .number()
+        .optional()
+        .default(1)
+        .openapi({ example: 1, description: "Page number", param: { in: "query", name: "page" } }),
+      limit: z.coerce
         .number()
         .optional()
         .default(10)
-        .openapi({ example: 10, description: "Number of users per page" }),
+        .openapi({
+          example: 10,
+          description: "Number of users per page",
+          param: { in: "query", name: "limit" },
+        }),
     }),
   },
   responses: {
