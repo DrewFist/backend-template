@@ -7,8 +7,8 @@ import { type AppRouteHandler } from "@/types";
 
 export const postRefreshTokenRoute = createRoute({
   method: "post",
-  path: "/v1/refresh-token",
-  tags: ["Authentication"],
+  path: "/v1/auth/refresh-token",
+  tags: ["Auth"],
   summary: "Refresh access token",
   description: "Generates a new access token using the session ID",
   request: {

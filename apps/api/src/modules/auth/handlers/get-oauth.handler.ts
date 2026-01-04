@@ -11,7 +11,7 @@ import { type AppRouteHandler } from "@/types";
 export const getOauthProviderRoute = createRoute({
   method: "get",
   path: "/v1/oauth/{provider}",
-  tags: ["Authentication"],
+  tags: ["OAuth"],
   summary: "Initiate OAuth authentication",
   description: "Generates and returns an OAuth authorization URL for the specified provider",
   request: {

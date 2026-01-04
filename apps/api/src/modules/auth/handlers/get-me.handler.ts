@@ -8,7 +8,7 @@ import { HTTPException } from "hono/http-exception";
 export const getMeRoute = createRoute({
   method: "get",
   path: "/v1/auth/me",
-  tags: ["Authentication"],
+  tags: ["Auth"],
   summary: "Get current authenticated user",
   description: "Retrieves the details of the currently authenticated user",
   middleware: [enforceUserMiddleware],

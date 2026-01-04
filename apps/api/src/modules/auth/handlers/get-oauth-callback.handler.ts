@@ -12,7 +12,7 @@ import { setCookie } from "hono/cookie";
 export const getOauthCallbackRoute = createRoute({
   method: "get",
   path: "/v1/oauth/{provider}/callback",
-  tags: ["Authentication"],
+  tags: ["OAuth"],
   summary: "OAuth provider callback",
   description: "Handles the OAuth callback from the provider and exchanges code for tokens",
   request: {
