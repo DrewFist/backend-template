@@ -78,7 +78,7 @@ export const getOauthCallbackRoute = createRoute({
       redirect: z
         .string()
         .optional()
-        .default("false")
+        .default("true")
         .openapi({
           description: "Whether to redirect to the frontend after successful authentication",
           example: true,
