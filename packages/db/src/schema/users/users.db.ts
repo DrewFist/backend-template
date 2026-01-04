@@ -1,5 +1,13 @@
+import { enumToPgEnum } from "@repo/shared";
 import { usersSchema } from "./index";
-import { text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { pgEnum, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+
+export enum UserRole {
+  ADMIN = "admin",
+  USER = "user",
+}
+
+export const userRoleEnum = pgEnum("user_role", enumToPgEnum(UserRole));
 
 export const usersTable = usersSchema.table(
   "users",
@@ -10,6 +18,7 @@ export const usersTable = usersSchema.table(
     lastName: text("last_name"),
     avatar: text("avatar"),
     providerAccountId: text("provider_account_id").notNull().unique(),
+    role: userRoleEnum("role").notNull().default(UserRole.USER),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),

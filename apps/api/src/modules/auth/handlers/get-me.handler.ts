@@ -4,6 +4,7 @@ import { errorResponseSchemas, logger } from "@repo/shared";
 import { type AppRouteHandler } from "../../../types";
 import { enforceUserMiddleware } from "../../../middlewares/enforce-user.middleware";
 import { HTTPException } from "hono/http-exception";
+import { UserRole } from "@repo/db/src/schema/users/users.db";
 
 export const getMeRoute = createRoute({
   method: "get",
@@ -26,6 +27,7 @@ export const getMeRoute = createRoute({
                 email: z.email().openapi({ example: "hey@ayushchugh.com" }),
                 firstName: z.string().openapi({ example: "Ayush" }),
                 lastName: z.string().nullable().openapi({ example: "Chugh" }),
+                role: z.enum(UserRole).openapi({ example: UserRole.USER }),
               }),
             }),
           }),
@@ -49,6 +51,7 @@ export const getMeHandler: AppRouteHandler<GetMeRoute> = (c) => {
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
+          role: user.role,
         },
       },
     });
