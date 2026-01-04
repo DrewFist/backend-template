@@ -1,5 +1,5 @@
 import { env } from "@/env";
-import { serve, ServerType } from "@hono/node-server";
+import { serve, type ServerType } from "@hono/node-server";
 import { cors } from "hono/cors";
 import packageJson from "../package.json";
 import {
@@ -14,7 +14,7 @@ import { getMetrics, getMetricsContentType } from "@repo/shared/metrics";
 import { initializeDB, connectDB, closeDB } from "@repo/db";
 import authRoutes from "@/modules/auth/auth.routes";
 import { getUserMiddleware } from "@/middlewares/get-user.middleware";
-import { AppBindings, AppRouteHandler } from "./types";
+import { type AppBindings, type AppRouteHandler } from "./types";
 import { createRoute, z } from "@hono/zod-openapi";
 import { secureHeaders } from "hono/secure-headers";
 
@@ -128,7 +128,7 @@ async function start() {
 }
 
 let server: ServerType;
-start();
+void start();
 
 // Stop server
 async function stop() {
@@ -158,7 +158,7 @@ async function stop() {
       logger.error("Force closed server", {
         module: "system",
         action: "shutdown",
-        error: err as Error,
+        error: err,
       });
     } else {
       logger.info("Server closed", {

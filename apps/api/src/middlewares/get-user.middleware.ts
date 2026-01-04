@@ -15,7 +15,8 @@ export const getUserMiddleware: MiddlewareHandler<AppBindings> = async (c, next)
     const authHeader = c.req.header("Authorization");
     const bearerToken = authHeader?.replace("Bearer ", "").trim();
     const accessToken =
-      getCookie(c, "accessToken") || (bearerToken && bearerToken !== "Bearer" ? bearerToken : null);
+      getCookie(c, "access_token") ||
+      (bearerToken && bearerToken !== "Bearer" ? bearerToken : null);
 
     if (accessToken) {
       // verify access token
